@@ -21,7 +21,7 @@
     <div class="aa-status text-caption px-2 py-1 flex-shrink-0 d-flex align-center" :class="statusClass">
       <v-icon size="14" class="mr-1">{{ statusIcon }}</v-icon><span>{{ statusText }}</span>
       <v-spacer />
-      <v-btn v-if="cfg.bridgeUrl && !cv" size="x-small" variant="tonal" :loading="cvLoading" @click="ensureCv">
+      <v-btn v-if="cfg.bridgeUrl && !cvReady" size="x-small" variant="tonal" :loading="cvLoading" @click="ensureCv">
         {{ $t("plugins.duetToolAlign.cv.load") }}
       </v-btn>
     </div>
@@ -149,8 +149,8 @@ import { LogLevel, useUiStore } from "@/stores/ui";
 import { type AxisCapture, computeToolOffset, formatG10, type ToolOffset } from "../util/toolAlign";
 import { resolveOmPath } from "../util/omPath";
 import { type AutoAlignConfig, resolveOpencvUrl, useConfig } from "../model/document";
-import { loadOpenCV } from "../cv/opencvLoader";
-import { type CvLike, detectNozzle } from "../cv/detectNozzle";
+import { pickNearestToCentre } from "../cv/detectNozzle";
+import { WorkerDetector } from "../cv/detectorWorker";
 import { grabFrame } from "../cv/frameGrabber";
 import type { Mat2, Vec2 } from "../cv/geometry";
 import { centreTool, type MachineIO, runCalibration } from "../model/orchestrator";
@@ -166,22 +166,26 @@ const cfg = props.widget ?? useConfig();
 const disabledNow = computed(() => props.disabled || uiStore.uiFrozen || busy.value);
 
 // --- CV engine -----------------------------------------------------------------
-const cv = ref<CvLike | null>(null);
+// OpenCV runs entirely in a Web Worker (loading + detection) so the ~17 MB runtime never blocks the
+// DWC tab. `cvReady` mirrors the worker's state for the template.
+const detector = new WorkerDetector();
+const cvReady = ref(false);
 const cvLoading = ref(false);
-async function ensureCv(): Promise<CvLike | null> {
-  if (cv.value) return cv.value;
-  if (cvLoading.value) return null; // a load is already in flight
+async function ensureCv(): Promise<boolean> {
+  if (cvReady.value) return true;
+  if (cvLoading.value) return false; // a load is already in flight
   const url = resolveOpencvUrl(cfg);
-  if (!url) { setStatus(i18n.global.t("plugins.duetToolAlign.noUrl"), "error"); return null; }
+  if (!url) { setStatus(i18n.global.t("plugins.duetToolAlign.noUrl"), "error"); return false; }
   cvLoading.value = true;
   setStatus(i18n.global.t("plugins.duetToolAlign.cv.loading"));
   try {
-    cv.value = await loadOpenCV(url);
+    await detector.init(url);
+    cvReady.value = true;
     setStatus(i18n.global.t("plugins.duetToolAlign.cv.ready"), "ok");
-    return cv.value;
+    return true;
   } catch (e) {
     setStatus(i18n.global.t("plugins.duetToolAlign.cv.error", { msg: (e as Error).message }), "error");
-    return null;
+    return false;
   } finally {
     cvLoading.value = false;
   }
@@ -258,13 +262,15 @@ const machineIO: MachineIO = {
 };
 
 async function detectOnce(): Promise<Vec2 | null> {
-  const engine = cv.value;
-  if (!engine || !cfg.bridgeUrl) return null;
+  if (!cvReady.value || !cfg.bridgeUrl) return null;
   try {
     const img = await grabFrame(cfg.bridgeUrl);
     frameW.value = img.width;
     frameH.value = img.height;
-    const c = detectNozzle(engine, img, { minRadius: cfg.minRadiusPx, maxRadius: cfg.maxRadiusPx });
+    const centre = { x: img.width / 2, y: img.height / 2 };
+    // detect() transfers the pixel buffer to the worker, so read dimensions/centre first.
+    const circles = await detector.detect(img, { minRadius: cfg.minRadiusPx, maxRadius: cfg.maxRadiusPx });
+    const c = pickNearestToCentre(circles, centre);
     lastDetection.value = c ? { x: c.x, y: c.y } : null;
     return lastDetection.value;
   } catch (e) {
@@ -492,8 +498,8 @@ onMounted(() => {
   timer = setInterval(() => { tick.value = Date.now(); }, 1000);
   if (cfg.bridgeUrl) void ensureCv();
 });
-watch(() => cfg.bridgeUrl, (url) => { if (url && !cv.value && !cvLoading.value) void ensureCv(); });
-onBeforeUnmount(() => { aborted = true; if (timer) clearInterval(timer); });
+watch(() => cfg.bridgeUrl, (url) => { if (url && !cvReady.value && !cvLoading.value) void ensureCv(); });
+onBeforeUnmount(() => { aborted = true; if (timer) clearInterval(timer); detector.dispose(); });
 </script>
 
 <style scoped>
