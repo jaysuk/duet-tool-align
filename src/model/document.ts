@@ -58,6 +58,17 @@ export interface AutoAlignConfig {
 	minRadiusPx: number;
 	maxRadiusPx: number;
 
+	/** Detector algorithm: "hough" (circle transform) or "contour" (threshold + contour of the bore). */
+	detector: "hough" | "contour";
+
+	/** --- Contour detector tuning --- */
+	/** Binary threshold 0–255; 0 = auto (Otsu). Pixels past it become the candidate blob. */
+	threshold: number;
+	/** Minimum contour circularity (4π·area/perimeter²), 0–1. Higher rejects non-round blobs. */
+	minCircularity: number;
+	/** The bore is darker than the nozzle (threshold keeps dark pixels). Off for a light target. */
+	darkBore: boolean;
+
 	/** --- HoughCircles detection tuning (exposed for live tuning) --- */
 	/** Inverse accumulator resolution. 1 = full res; higher finds rougher circles. */
 	houghDp: number;
@@ -106,6 +117,10 @@ export function defaultConfig(): AutoAlignConfig {
 		maxIterations: 25,
 		minRadiusPx: 5,
 		maxRadiusPx: 120,
+		detector: "hough",
+		threshold: 0,
+		minCircularity: 0.6,
+		darkBore: true,
 		houghDp: 1,
 		houghParam1: 100,
 		houghParam2: 30,

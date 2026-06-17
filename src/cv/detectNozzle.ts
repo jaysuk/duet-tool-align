@@ -38,19 +38,31 @@ export function pickLargest(circles: Array<Circle>): Circle | null {
 	return best;
 }
 
-/** Tunable HoughCircles parameters passed from the UI to the detector. */
+/** Tunable detection parameters passed from the UI to the worker (Hough + contour). */
 export interface DetectParams {
+	/** Which algorithm to run. */
+	method: "hough" | "contour";
 	minRadius: number;
 	maxRadius: number;
+	/** Median blur kernel; 0/1 = none. */
+	blur: number;
+	/** Downscale width; 0 = none. */
+	detectWidth: number;
+
+	// Hough
 	dp: number;
 	param1: number;
 	param2: number;
 	/** 0 = auto (min(w,h)/8). */
 	minDist: number;
-	/** Median blur kernel; 0/1 = none. */
-	blur: number;
-	/** Downscale width; 0 = none. */
-	detectWidth: number;
+
+	// Contour
+	/** Binary threshold 0–255; 0 = Otsu auto. */
+	threshold: number;
+	/** Minimum circularity 0–1. */
+	minCircularity: number;
+	/** Bore is darker than the nozzle (keep dark pixels). */
+	darkBore: boolean;
 }
 
 /**

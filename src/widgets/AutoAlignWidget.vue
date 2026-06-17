@@ -162,8 +162,25 @@
           </div>
 
           <div class="text-caption text-medium-emphasis mt-2 mb-1">{{ $t("plugins.duetToolAlign.settings.detectionHeading") }}</div>
+          <div class="d-flex ga-2 flex-wrap align-center mb-2">
+            <v-select v-model="cfg.detector" :items="detectorItems" item-title="title" item-value="value"
+                      density="compact" variant="outlined" hide-details class="aa-select"
+                      :label="$t('plugins.duetToolAlign.settings.detector')" />
+            <v-tooltip location="top" max-width="300" text="Pick the largest detected circle instead of the one nearest the crosshair. Handy while the nozzle is off-centre during tuning; turn off for centring.">
+              <template #activator="{ props }">
+                <v-switch v-bind="props" v-model="cfg.pickLargest" density="compact" hide-details color="primary"
+                          :label="$t('plugins.duetToolAlign.settings.pickLargest')" />
+              </template>
+            </v-tooltip>
+            <v-tooltip v-if="cfg.detector === 'contour'" location="top" max-width="300" text="The bore is darker than the nozzle, so threshold keeps the dark pixels. Turn off only if your target is brighter than its surroundings.">
+              <template #activator="{ props }">
+                <v-switch v-bind="props" v-model="cfg.darkBore" density="compact" hide-details color="primary"
+                          :label="$t('plugins.duetToolAlign.settings.darkBore')" />
+              </template>
+            </v-tooltip>
+          </div>
           <div class="d-flex ga-2 flex-wrap align-center">
-            <v-text-field v-for="f in detectFields" :key="f.key" :model-value="getNum(f.key)" @update:model-value="setNum(f.key, $event)"
+            <v-text-field v-for="f in activeDetectFields" :key="f.key" :model-value="getNum(f.key)" @update:model-value="setNum(f.key, $event)"
                           type="number" :min="f.min" :max="f.max" :step="f.step ?? 1"
                           density="compact" variant="outlined" hide-details class="aa-field"
                           :label="$t('plugins.duetToolAlign.settings.' + f.key)">
@@ -173,12 +190,6 @@
                 </v-tooltip>
               </template>
             </v-text-field>
-            <v-tooltip location="top" max-width="300" text="Pick the largest detected circle instead of the one nearest the crosshair. Handy while the nozzle is off-centre during tuning; turn off for centring.">
-              <template #activator="{ props }">
-                <v-switch v-bind="props" v-model="cfg.pickLargest" density="compact" hide-details color="primary"
-                          :label="$t('plugins.duetToolAlign.settings.pickLargest')" />
-              </template>
-            </v-tooltip>
           </div>
         </v-expansion-panel-text>
       </v-expansion-panel>
@@ -327,14 +338,18 @@ const machineIO: MachineIO = {
 // (including during the live Detect loop).
 function detectParams(): DetectParams {
   return {
+    method: cfg.detector,
     minRadius: cfg.minRadiusPx,
     maxRadius: cfg.maxRadiusPx,
+    blur: cfg.blurKsize,
+    detectWidth: cfg.detectWidth,
     dp: cfg.houghDp,
     param1: cfg.houghParam1,
     param2: cfg.houghParam2,
     minDist: cfg.houghMinDist,
-    blur: cfg.blurKsize,
-    detectWidth: cfg.detectWidth,
+    threshold: cfg.threshold,
+    minCircularity: cfg.minCircularity,
+    darkBore: cfg.darkBore,
   };
 }
 
@@ -615,16 +630,33 @@ const alignFields: Array<NumField> = [
   { key: "travelFeed", min: 100, max: 30000, step: 100, tip: "Feed rate (mm/min) for travel moves to the camera position. e.g. 6000." },
   { key: "jogFeed", min: 60, max: 12000, step: 60, tip: "Feed rate (mm/min) for small calibration/centring/Z-focus jogs. e.g. 1200." },
 ];
-const detectFields: Array<NumField> = [
+// Common to both detectors.
+const commonFields: Array<NumField> = [
   { key: "minRadiusPx", min: 1, max: 1000, step: 1, tip: "Smallest circle radius accepted (original-frame px). Raise to reject small specks / the inner dark dot. Watch the r= readout." },
   { key: "maxRadiusPx", min: 1, max: 2000, step: 1, tip: "Largest circle radius accepted (original-frame px). Must be above the bore radius or the bore won't be found. Watch the r= readout." },
+  { key: "blurKsize", min: 0, max: 21, step: 2, tip: "Median blur kernel (odd number) applied before detection to suppress speckle/glitter. 0 or 1 = off. Typical 3–9." },
+  { key: "detectWidth", min: 160, max: 2000, step: 20, tip: "Frame is downscaled to this width for detection speed (coords scaled back). Lower = faster, less precise. Typical 480–1000." },
+];
+// Hough-only.
+const houghFields: Array<NumField> = [
   { key: "houghParam2", min: 1, max: 300, step: 1, tip: "Detection sensitivity (Hough accumulator threshold). LOWER finds more circles (and more false ones); higher is stricter. The main knob. Typical 20–80." },
   { key: "houghParam1", min: 10, max: 400, step: 5, tip: "Edge sensitivity (Canny high threshold). Higher = only strong edges, ignoring faint surface texture. Typical 80–200." },
   { key: "houghDp", min: 1, max: 3, step: 0.1, tip: "Accumulator resolution (inverse). 1 = full detail; 1.5–2 finds rougher/blurrier circles, less accurately. Typical 1–2." },
   { key: "houghMinDist", min: 0, max: 2000, step: 5, tip: "Minimum distance between detected circle centres (px). 0 = auto (frame/8). Raise to avoid several overlapping detections." },
-  { key: "blurKsize", min: 0, max: 21, step: 2, tip: "Median blur kernel (odd number) applied before detection to suppress speckle/glitter. 0 or 1 = off. Typical 3–9." },
-  { key: "detectWidth", min: 160, max: 2000, step: 20, tip: "Frame is downscaled to this width for detection speed (coords scaled back). Lower = faster, less precise. Typical 480–1000." },
 ];
+// Contour-only.
+const contourFields: Array<NumField> = [
+  { key: "threshold", min: 0, max: 255, step: 1, tip: "Brightness cut (0–255) separating the bore from the nozzle. 0 = auto (Otsu), which usually works. Set manually if lighting is uneven." },
+  { key: "minCircularity", min: 0, max: 1, step: 0.05, tip: "How round a blob must be to count (4π·area/perimeter²). Higher rejects irregular shapes; lower is more forgiving. Typical 0.5–0.8." },
+];
+// Fields shown for the currently-selected detector.
+const activeDetectFields = computed(() =>
+  cfg.detector === "hough" ? [...commonFields, ...houghFields] : [...commonFields, ...contourFields]);
+const detectorItems = [
+  { title: i18n.global.t("plugins.duetToolAlign.settings.methodHough"), value: "hough" },
+  { title: i18n.global.t("plugins.duetToolAlign.settings.methodContour"), value: "contour" },
+];
+
 function getNum(key: string): number {
   return (cfg as unknown as Record<string, number>)[key];
 }
@@ -666,6 +698,7 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearInterval(timer); detecto
 .aa-btn { min-width: 0; }
 .aa-narrow { max-width: 120px; }
 .aa-field { max-width: 160px; }
+.aa-select { max-width: 200px; }
 
 .aa-table { min-height: 0; overflow: auto; }
 .aa-grid { width: 100%; border-collapse: collapse; font-size: 0.8em; }

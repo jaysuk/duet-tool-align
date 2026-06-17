@@ -35,35 +35,82 @@ function awaitRuntime(g, done, fail) {
   })();
 }
 
-function detect(cv, data, width, height, p) {
+// Shared preprocessing: grayscale, optional downscale (for speed), optional median blur. Returns the
+// working Mat and the scale factor (so circle coords can be mapped back to original-frame px).
+function prep(cv, data, width, height, p) {
   const src = cv.matFromImageData({ data: data, width: width, height: height });
   const gray = new cv.Mat();
   const work = new cv.Mat();
+  cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+  const target = p.detectWidth > 0 ? p.detectWidth : width;
+  const scale = width > target ? target / width : 1;
+  if (scale < 1) {
+    cv.resize(gray, work, new cv.Size(Math.round(width * scale), Math.round(height * scale)), 0, 0, cv.INTER_AREA);
+  } else {
+    gray.copyTo(work);
+  }
+  const ks = p.blur >= 3 && p.blur % 2 === 1 ? p.blur : 0;
+  if (ks) cv.medianBlur(work, work, ks);
+  src.delete(); gray.delete();
+  return { work: work, scale: scale };
+}
+
+function detectHough(cv, work, scale, p) {
   const found = [];
+  const minDist = p.minDist > 0 ? p.minDist * scale : Math.max(20, Math.floor(Math.min(work.cols, work.rows) / 8));
+  const c = new cv.Mat();
   try {
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-    const target = p.detectWidth > 0 ? p.detectWidth : width;
-    const scale = width > target ? target / width : 1;
-    if (scale < 1) {
-      cv.resize(gray, work, new cv.Size(Math.round(width * scale), Math.round(height * scale)), 0, 0, cv.INTER_AREA);
-    } else {
-      gray.copyTo(work);
+    cv.HoughCircles(work, c, cv.HOUGH_GRADIENT, p.dp, minDist, p.param1, p.param2,
+      Math.round(p.minRadius * scale), Math.round(p.maxRadius * scale));
+    for (let i = 0; i < c.cols; i++) {
+      const b = i * 3;
+      found.push({ x: c.data32F[b] / scale, y: c.data32F[b + 1] / scale, r: c.data32F[b + 2] / scale });
     }
-    const ks = p.blur >= 3 && p.blur % 2 === 1 ? p.blur : 0;
-    if (ks) cv.medianBlur(work, work, ks);
-    const w = work.cols, h = work.rows;
-    const minDist = p.minDist > 0 ? p.minDist * scale : Math.max(20, Math.floor(Math.min(w, h) / 8));
-    const c = new cv.Mat();
-    try {
-      cv.HoughCircles(work, c, cv.HOUGH_GRADIENT, p.dp, minDist, p.param1, p.param2,
-        Math.round(p.minRadius * scale), Math.round(p.maxRadius * scale));
-      for (let i = 0; i < c.cols; i++) {
-        const b = i * 3;
-        found.push({ x: c.data32F[b] / scale, y: c.data32F[b + 1] / scale, r: c.data32F[b + 2] / scale });
-      }
-    } finally { c.delete(); }
-  } finally { src.delete(); gray.delete(); work.delete(); }
+  } finally { c.delete(); }
   return found;
+}
+
+// Threshold the bore (dark blob on a bright nozzle), clean it morphologically, then take each
+// sufficiently-round contour's min-enclosing circle. Robust to glare/texture that fools Hough.
+function detectContour(cv, work, scale, p) {
+  const found = [];
+  const bin = new cv.Mat();
+  const type = (p.darkBore ? cv.THRESH_BINARY_INV : cv.THRESH_BINARY);
+  if (p.threshold > 0) cv.threshold(work, bin, p.threshold, 255, type);
+  else cv.threshold(work, bin, 0, 255, type | cv.THRESH_OTSU);
+  const k = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(5, 5));
+  try {
+    cv.morphologyEx(bin, bin, cv.MORPH_OPEN, k);
+    cv.morphologyEx(bin, bin, cv.MORPH_CLOSE, k);
+  } finally { k.delete(); }
+  const contours = new cv.MatVector();
+  const hierarchy = new cv.Mat();
+  try {
+    cv.findContours(bin, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+    const minRs = p.minRadius * scale, maxRs = p.maxRadius * scale;
+    for (let i = 0; i < contours.size(); i++) {
+      const cnt = contours.get(i);
+      try {
+        const area = cv.contourArea(cnt, false);
+        const peri = cv.arcLength(cnt, true);
+        if (peri > 0 && area > 0) {
+          const circ = 4 * Math.PI * area / (peri * peri);
+          const mec = cv.minEnclosingCircle(cnt);
+          if (circ >= p.minCircularity && mec.radius >= minRs && mec.radius <= maxRs) {
+            found.push({ x: mec.center.x / scale, y: mec.center.y / scale, r: mec.radius / scale });
+          }
+        }
+      } finally { cnt.delete(); }
+    }
+  } finally { contours.delete(); hierarchy.delete(); bin.delete(); }
+  return found;
+}
+
+function detect(cv, data, width, height, p) {
+  const prepped = prep(cv, data, width, height, p);
+  try {
+    return p.method === 'contour' ? detectContour(cv, prepped.work, prepped.scale, p) : detectHough(cv, prepped.work, prepped.scale, p);
+  } finally { prepped.work.delete(); }
 }
 
 self.onmessage = function (e) {
