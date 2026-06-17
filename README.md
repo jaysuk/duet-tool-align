@@ -57,8 +57,9 @@ folder.
 - `DWC_DIR=… npm run typecheck` — type-check against the DWC checkout.
 - `DWC_DIR=… npm run verify-build` — confirm it bundles into an installable ZIP.
 
-> Dev note: `package.json` points `dwc-plugin-runtime` / `dwc-plugin-test-kit` at sibling local
-> checkouts (`file:../…`) for offline work. Switch to pinned `github:` tags for release.
+CI (`.github/workflows/ci.yml`) runs the unit tests plus a build + type-check against DWC on every
+push, via the shared [dwc-plugin-test-kit](https://github.com/jaysuk/dwc-plugin-test-kit) reusable
+workflow.
 
 ## License
 

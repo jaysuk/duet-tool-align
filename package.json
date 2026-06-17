@@ -13,13 +13,13 @@
     "verify-build": "dwc-plugin-verify-build"
   },
   "dependencies": {
-    "dwc-plugin-runtime": "file:../dwc-plugin-runtime"
+    "dwc-plugin-runtime": "github:jaysuk/dwc-plugin-runtime#v0.5.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.4",
     "@vitest/coverage-v8": "^4.1.8",
     "@vue/test-utils": "^2.4.6",
-    "dwc-plugin-test-kit": "file:../dwc-plugin-test-kit-1",
+    "dwc-plugin-test-kit": "github:jaysuk/dwc-plugin-test-kit#v0.2.0",
     "happy-dom": "^15.11.7",
     "vitest": "^4.1.8",
     "vue": "^3.5.30",
