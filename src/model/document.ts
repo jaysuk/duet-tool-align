@@ -23,7 +23,15 @@ export interface AutoAlignConfig {
 	/** OpenCV.js loader URL. Default derives from bridgeUrl (`<bridge>/opencv/opencv.js`). */
 	opencvUrl: string;
 
-	/** Reference tool number; its centre is the origin all offsets are measured from. */
+	/**
+	 * How the 0,0 origin is defined:
+	 *  - "tool":  a reference tool (e.g. T0). Its captured centre is the origin; other tools are
+	 *             measured relative to it and the reference tool itself keeps its existing G10.
+	 *  - "point": a fixed carriage datum (e.g. the E3D toolchanger's nozzle-alignment switch).
+	 *             You capture that point once; EVERY tool (T0 included) is offset from it.
+	 */
+	referenceMode: "tool" | "point";
+	/** Reference tool number (used when referenceMode = "tool"). */
 	referenceTool: number;
 	/** Negate computed offsets (machine/firmware sign convention escape hatch). */
 	invertOffsets: boolean;
@@ -88,6 +96,8 @@ export interface AutoAlignConfig {
 
 	/** Z focus jog step, in mm (the -Z/+Z buttons that sharpen the image). */
 	zStep: number;
+	/** X/Y manual jog step, in mm (the X/Y jog buttons for bringing a tool into frame). */
+	xyStep: number;
 
 	/** Optional macros run at the start/finish of a full alignment run, and to persist offsets. */
 	startCommand: string;
@@ -99,6 +109,7 @@ export function defaultConfig(): AutoAlignConfig {
 	return {
 		bridgeUrl: "",
 		opencvUrl: "",
+		referenceMode: "tool",
 		referenceTool: 0,
 		invertOffsets: false,
 		cameraX: null,
@@ -129,6 +140,7 @@ export function defaultConfig(): AutoAlignConfig {
 		detectWidth: 800,
 		pickLargest: false,
 		zStep: 0.05,
+		xyStep: 0.1,
 		startCommand: "",
 		finishCommand: "",
 		saveCommand: "M500",

@@ -56,6 +56,25 @@
       </v-tooltip>
     </div>
 
+    <!-- Manual X/Y jog (bring a tool into frame) + unload the active tool -->
+    <div class="aa-jog d-flex flex-wrap align-center ga-1 px-1 pt-1 flex-shrink-0">
+      <span class="text-caption text-medium-emphasis mr-1">{{ $t("plugins.duetToolAlign.jog.label") }}</span>
+      <v-btn size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('X', -1)">X−</v-btn>
+      <v-btn size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('X', 1)">X+</v-btn>
+      <v-btn size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('Y', -1)">Y−</v-btn>
+      <v-btn size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('Y', 1)">Y+</v-btn>
+      <v-tooltip location="top" max-width="280" text="X/Y jog distance per button press (mm). Use a big step to bring a far-off tool into frame, then a small step to fine-tune.">
+        <template #activator="{ props }">
+          <v-text-field v-bind="props" v-model.number="cfg.xyStep" type="number" min="0.01" max="50" step="0.05"
+                        density="compact" variant="outlined" hide-details class="aa-narrow" suffix="mm" />
+        </template>
+      </v-tooltip>
+      <v-spacer />
+      <v-btn size="small" variant="tonal" prepend-icon="mdi-eject" :disabled="disabledNow" @click="unloadTool">
+        {{ $t("plugins.duetToolAlign.tools.unload") }}
+      </v-btn>
+    </div>
+
     <!-- Camera position + primary actions -->
     <div class="aa-actions d-flex flex-wrap align-center ga-1 px-1 pt-1 flex-shrink-0">
       <v-btn size="small" variant="tonal" prepend-icon="mdi-camera-marker" :disabled="disabledNow || !hasCameraPos" @click="gotoCamera">
@@ -117,7 +136,15 @@
                :disabled="disabledNow" @click="saveOffsets">
           {{ $t("plugins.duetToolAlign.offsets.save") }}
         </v-btn>
-        <v-btn size="small" variant="text" :disabled="disabledNow || current < 0" @click="setReference">
+        <template v-if="cfg.referenceMode === 'point'">
+          <v-btn size="small" variant="text" prepend-icon="mdi-crosshairs-gps" :disabled="disabledNow" @click="captureRefPoint">
+            {{ $t("plugins.duetToolAlign.offsets.captureDatum") }}
+          </v-btn>
+          <span class="text-caption text-medium-emphasis aa-num">
+            {{ $t("plugins.duetToolAlign.offsets.datum") }}: {{ refPoint ? refPoint.x.toFixed(2) + ", " + refPoint.y.toFixed(2) : "—" }}
+          </span>
+        </template>
+        <v-btn v-else size="small" variant="text" :disabled="disabledNow || current < 0" @click="setReference">
           {{ $t("plugins.duetToolAlign.offsets.setRef") }}
         </v-btn>
         <v-switch v-model="invert" density="compact" hide-details color="primary"
@@ -148,7 +175,16 @@
           </v-text-field>
 
           <div class="text-caption text-medium-emphasis mb-1">{{ $t("plugins.duetToolAlign.settings.alignmentHeading") }}</div>
-          <div class="d-flex ga-2 flex-wrap mb-2">
+          <div class="d-flex ga-2 flex-wrap mb-2 align-center">
+            <v-select v-model="cfg.referenceMode" :items="refModeItems" item-title="title" item-value="value"
+                      density="compact" variant="outlined" hide-details class="aa-select"
+                      :label="$t('plugins.duetToolAlign.settings.referenceMode')">
+              <template #append-inner>
+                <v-tooltip location="top" max-width="320" text="How the 0,0 origin is defined. Reference tool: a tool (e.g. T0) is the origin, others are relative to it. Carriage datum: a fixed point on the carriage (e.g. the E3D toolchanger switch) is the origin — capture it once and every tool is offset from it.">
+                  <template #activator="{ props }"><v-icon v-bind="props" size="16" color="medium-emphasis">mdi-information-outline</v-icon></template>
+                </v-tooltip>
+              </template>
+            </v-select>
             <v-text-field v-for="f in alignFields" :key="f.key" :model-value="getNum(f.key)" @update:model-value="setNum(f.key, $event)"
                           type="number" :min="f.min" :max="f.max" :step="f.step ?? 1"
                           density="compact" variant="outlined" hide-details class="aa-field"
@@ -416,6 +452,27 @@ function focusZ(dir: number): void {
   const d = dir * (cfg.zStep || 0.05);
   void send(`M120\nG91\nG1 Z${d.toFixed(3)} F${cfg.jogFeed}\nG90\nM121`);
 }
+
+// Manual X/Y jog to bring a tool's nozzle into frame (useful when tools differ a lot).
+function jogXY(axis: "X" | "Y", dir: number): void {
+  if (disabledNow.value) return;
+  const d = dir * (cfg.xyStep || 0.1);
+  void send(`M120\nG91\nG1 ${axis}${d.toFixed(3)} F${cfg.jogFeed}\nG90\nM121`);
+}
+
+// Unload the active tool (RRF T-1) — e.g. to bring a bare carriage datum/switch over the camera.
+function unloadTool(): void {
+  if (disabledNow.value) return;
+  void send("T-1");
+}
+
+// Capture the current machine XY as the carriage datum (referenceMode = "point").
+function captureRefPoint(): void {
+  const x = machinePos("X"), y = machinePos("Y");
+  if (x == null || y == null) { notify(i18n.global.t("plugins.duetToolAlign.noPos")); return; }
+  refPoint.value = { x, y };
+  notify(i18n.global.t("plugins.duetToolAlign.offsets.datumSaved"), LogLevel.success);
+}
 function frameCentre(): Vec2 {
   return { x: (frameW.value || 640) / 2, y: (frameH.value || 480) / 2 };
 }
@@ -423,8 +480,15 @@ function frameCentre(): Vec2 {
 // --- Alignment state -----------------------------------------------------------
 const transform = ref<Mat2 | null>(null);
 const captures = ref<Record<number, AxisCapture>>({});
+// Captured carriage datum (referenceMode = "point"): the 0,0 every tool is offset from.
+const refPoint = ref<{ x: number; y: number } | null>(null);
 const busy = ref(false);
 let aborted = false;
+
+const refModeItems = [
+  { title: i18n.global.t("plugins.duetToolAlign.settings.refModeTool"), value: "tool" },
+  { title: i18n.global.t("plugins.duetToolAlign.settings.refModePoint"), value: "point" },
+];
 
 const invert = computed({
   get: () => !!cfg.invertOffsets,
@@ -522,35 +586,47 @@ async function selectAndTravel(n: number): Promise<void> {
   if (code) await machineIO.sendCode(code);
 }
 
+async function calibrateIfNeeded(): Promise<boolean> {
+  if (transform.value) return true;
+  const cal = await runCalibration(machineIO, detectOnce, motionParams(), progress);
+  if (!cal.ok || !cal.mmPerPx) { setStatus(i18n.global.t("plugins.duetToolAlign.calib.fail", { msg: cal.error ?? "" }), "error"); return false; }
+  transform.value = cal.mmPerPx;
+  setStatus(i18n.global.t("plugins.duetToolAlign.calib.done", { residual: (cal.residualMm ?? 0).toFixed(3), used: cal.used ?? 0 }), "ok");
+  return true;
+}
+
+// Select a tool, travel to the camera, calibrate if we haven't yet, then centre and capture it.
+async function centreAndCapture(toolNum: number): Promise<void> {
+  await selectAndTravel(toolNum);
+  if (aborted) return;
+  if (!(await calibrateIfNeeded())) { aborted = true; return; }
+  if (aborted) return;
+  const res = await centreTool(machineIO, detectOnce, transform.value!, frameCentre(), motionParams(), progress);
+  if (res.ok && res.position) captureXY(toolNum, res.position);
+}
+
 async function runFull(): Promise<void> {
   if (busy.value || !(await ensureCv())) return;
+  if (cfg.referenceMode === "point" && !refPoint.value) {
+    setStatus(i18n.global.t("plugins.duetToolAlign.run.needRefPoint"), "error");
+    return;
+  }
   busy.value = true; aborted = false;
   try {
     if (cfg.startCommand) await machineIO.sendCode(cfg.startCommand);
-
-    // Reference tool: select, travel, calibrate (once), centre + capture origin.
-    await selectAndTravel(cfg.referenceTool);
-    if (aborted) return;
-    if (!transform.value) {
-      const cal = await runCalibration(machineIO, detectOnce, motionParams(), progress);
-      if (!cal.ok || !cal.mmPerPx) { setStatus(i18n.global.t("plugins.duetToolAlign.calib.fail", { msg: cal.error ?? "" }), "error"); return; }
-      transform.value = cal.mmPerPx;
+    let order = tools.value.map((t) => t.number);
+    // In reference-tool mode do the reference tool first, so calibration happens on it and its
+    // capture is the origin. In carriage-datum mode the order doesn't matter (origin is refPoint).
+    if (cfg.referenceMode === "tool") {
+      order = [cfg.referenceTool, ...order.filter((n) => n !== cfg.referenceTool)];
     }
-    let res = await centreTool(machineIO, detectOnce, transform.value, frameCentre(), motionParams(), progress);
-    if (aborted) return;
-    if (res.ok && res.position) captureXY(cfg.referenceTool, res.position);
-
-    // Every other tool.
-    for (const t of tools.value) {
-      if (aborted) { setStatus(i18n.global.t("plugins.duetToolAlign.run.aborted"), "error"); return; }
-      if (t.number === cfg.referenceTool) continue;
-      await selectAndTravel(t.number);
-      res = await centreTool(machineIO, detectOnce, transform.value, frameCentre(), motionParams(), progress);
-      if (res.ok && res.position) captureXY(t.number, res.position);
+    for (const n of order) {
+      if (aborted) break;
+      await centreAndCapture(n);
     }
-
-    if (cfg.finishCommand) await machineIO.sendCode(cfg.finishCommand);
-    setStatus(i18n.global.t("plugins.duetToolAlign.run.done"), "ok");
+    if (!aborted && cfg.finishCommand) await machineIO.sendCode(cfg.finishCommand);
+    setStatus(aborted ? i18n.global.t("plugins.duetToolAlign.run.aborted")
+      : i18n.global.t("plugins.duetToolAlign.run.done"), aborted ? "error" : "ok");
   } catch (e) {
     setStatus((e as Error).message, "error");
   } finally {
@@ -566,15 +642,26 @@ function setReference(): void {
   cfg.referenceTool = current.value;
 }
 function offsetFor(t: number): ToolOffset | null {
-  const ct = captures.value[t], cr = captures.value[cfg.referenceTool];
-  if (!ct || !cr) return null;
+  const ct = captures.value[t];
+  if (!ct) return null;
+  if (cfg.referenceMode === "point") {
+    // Every tool (T0 included) is offset from the captured carriage datum; no carried base offset.
+    if (!refPoint.value) return null;
+    return computeToolOffset(refPoint.value, ct, { x: 0, y: 0 }, cfg.invertOffsets);
+  }
+  const cr = captures.value[cfg.referenceTool];
+  if (!cr) return null;
   return computeToolOffset(cr, ct, refOffset(), cfg.invertOffsets);
+}
+// In "tool" mode the reference tool keeps its own offset (excluded); in "point" mode every tool gets one.
+function isOffsettable(t: number): boolean {
+  return cfg.referenceMode === "point" || t !== cfg.referenceTool;
 }
 function g10For(t: number): string | null {
   const o = offsetFor(t);
   return o ? formatG10(t, o) : null;
 }
-const anyApplicable = computed(() => tools.value.some((t) => t.number !== cfg.referenceTool && g10For(t.number)));
+const anyApplicable = computed(() => tools.value.some((t) => isOffsettable(t.number) && g10For(t.number)));
 
 function fmtPair(c?: AxisCapture): string {
   if (!c || typeof c.x !== "number" || typeof c.y !== "number") return "—";
@@ -587,7 +674,7 @@ function fmtOffset(o: ToolOffset | null): string {
 const rows = computed(() => tools.value.map((t) => ({
   number: t.number,
   name: t.name || ("T" + t.number),
-  isRef: t.number === cfg.referenceTool,
+  isRef: cfg.referenceMode === "tool" && t.number === cfg.referenceTool,
   captured: fmtPair(captures.value[t.number]),
   offset: fmtOffset(offsetFor(t.number)),
   g10: g10For(t.number),
@@ -599,7 +686,7 @@ async function applyTool(t: number): Promise<void> {
   if (await confirmApply([cmd])) void send(cmd);
 }
 async function applyAll(): Promise<void> {
-  const cmds = tools.value.filter((t) => t.number !== cfg.referenceTool).map((t) => g10For(t.number)).filter((c): c is string => !!c);
+  const cmds = tools.value.filter((t) => isOffsettable(t.number)).map((t) => g10For(t.number)).filter((c): c is string => !!c);
   if (!cmds.length) return;
   if (cfg.saveCommand) cmds.push(cfg.saveCommand);
   if (await confirmApply(cmds)) void send(cmds.join("\n"));
