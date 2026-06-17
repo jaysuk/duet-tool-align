@@ -41,29 +41,49 @@ function injectScript(url: string): Promise<void> {
 	});
 }
 
+/**
+ * Resolve once the OpenCV.js runtime is usable, tolerant of every prebuilt shape the global `cv` can
+ * take: a thenable/Promise, a factory function returning one, a module that's already initialised
+ * (has `Mat`), or one that still needs to fire `onRuntimeInitialized`. Polls so that a callback firing
+ * before we attach it (a real race with inlined-wasm builds) is still caught via the `Mat` check.
+ */
 function awaitRuntime(): Promise<CvLike> {
 	return new Promise((resolve, reject) => {
-		const start = Date.now();
-		const timeoutMs = 30_000;
+		const deadline = Date.now() + 30_000;
+		let asyncHandled = false;
+		const finalize = (m: unknown) => resolve(m as CvLike);
+
 		const tick = () => {
 			const g = globalThis.cv as unknown;
 			if (g) {
-				// Newer factory form: cv is a function returning a promise to the module.
-				if (typeof g === "function") {
-					(g as () => Promise<CvLike>)().then(resolve).catch(reject);
+				const obj = g as { then?: unknown; Mat?: unknown; onRuntimeInitialized?: () => void; __taHook?: boolean };
+				// Promise/thenable form.
+				if (typeof obj.then === "function" && !asyncHandled) {
+					asyncHandled = true;
+					(g as Promise<CvLike>).then(finalize, reject);
 					return;
 				}
-				const mod = g as { Mat?: unknown; onRuntimeInitialized?: () => void };
-				if (mod.Mat) {
-					resolve(mod as unknown as CvLike);
+				// Factory-function form.
+				if (typeof g === "function" && !asyncHandled) {
+					asyncHandled = true;
+					try { Promise.resolve((g as () => unknown)()).then(finalize, reject); } catch (e) { reject(e); }
 					return;
 				}
-				// Older form: wait for the runtime-initialised callback.
-				mod.onRuntimeInitialized = () => resolve(mod as unknown as CvLike);
-				return;
+				// Already initialised.
+				if (obj.Mat) {
+					finalize(g);
+					return;
+				}
+				// Module present but not ready yet — attach the init callback once, then keep polling in
+				// case it already fired.
+				if (!obj.__taHook) {
+					obj.__taHook = true;
+					const prev = obj.onRuntimeInitialized;
+					obj.onRuntimeInitialized = () => { try { prev?.(); } finally { finalize(g); } };
+				}
 			}
-			if (Date.now() - start > timeoutMs) {
-				reject(new Error("OpenCV.js did not initialise within 30s"));
+			if (Date.now() > deadline) {
+				reject(new Error("OpenCV.js loaded but did not initialise within 30s"));
 				return;
 			}
 			setTimeout(tick, 50);

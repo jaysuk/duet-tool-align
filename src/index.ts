@@ -20,6 +20,11 @@ import en from "./i18n/en.json";
 
 registerPluginMessages(PLUGIN_ID, { en });
 
+// registerRoute is NOT idempotent — it pushes a nav item + route every call. If this module is
+// evaluated more than once in a session (e.g. installing a new build over a running one without a
+// full DWC reload), that yields a duplicate "Tool Align" entry. Clearing any prior registration for
+// our path first makes load self-healing. unregisterRoute is a no-op when nothing is registered.
+unregisterRoute(ROUTE_PATH);
 registerRoute(AutoAlignPage, {
 	Plugins: {
 		DuetToolAlign: {

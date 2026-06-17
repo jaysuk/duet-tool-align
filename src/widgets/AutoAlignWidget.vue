@@ -18,8 +18,12 @@
     </div>
 
     <!-- Status line -->
-    <div class="aa-status text-caption px-2 py-1 flex-shrink-0" :class="statusClass">
-      <v-icon size="14" class="mr-1">{{ statusIcon }}</v-icon>{{ statusText }}
+    <div class="aa-status text-caption px-2 py-1 flex-shrink-0 d-flex align-center" :class="statusClass">
+      <v-icon size="14" class="mr-1">{{ statusIcon }}</v-icon><span>{{ statusText }}</span>
+      <v-spacer />
+      <v-btn v-if="cfg.bridgeUrl && !cv" size="x-small" variant="tonal" :loading="cvLoading" @click="ensureCv">
+        {{ $t("plugins.duetToolAlign.cv.load") }}
+      </v-btn>
     </div>
 
     <!-- Tool buttons (auto-populated from the object model) -->
@@ -135,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import { showConfirmDialog } from "@/composables/useConfirmDialog";
 import i18n from "@/i18n";
@@ -163,20 +167,23 @@ const disabledNow = computed(() => props.disabled || uiStore.uiFrozen || busy.va
 
 // --- CV engine -----------------------------------------------------------------
 const cv = ref<CvLike | null>(null);
-const cvError = ref("");
+const cvLoading = ref(false);
 async function ensureCv(): Promise<CvLike | null> {
   if (cv.value) return cv.value;
+  if (cvLoading.value) return null; // a load is already in flight
   const url = resolveOpencvUrl(cfg);
-  if (!url) { cvError.value = i18n.global.t("plugins.duetToolAlign.noUrl"); return null; }
+  if (!url) { setStatus(i18n.global.t("plugins.duetToolAlign.noUrl"), "error"); return null; }
+  cvLoading.value = true;
   setStatus(i18n.global.t("plugins.duetToolAlign.cv.loading"));
   try {
     cv.value = await loadOpenCV(url);
-    setStatus(i18n.global.t("plugins.duetToolAlign.cv.ready"));
+    setStatus(i18n.global.t("plugins.duetToolAlign.cv.ready"), "ok");
     return cv.value;
   } catch (e) {
-    cvError.value = i18n.global.t("plugins.duetToolAlign.cv.error", { msg: (e as Error).message });
-    setStatus(cvError.value, "error");
+    setStatus(i18n.global.t("plugins.duetToolAlign.cv.error", { msg: (e as Error).message }), "error");
     return null;
+  } finally {
+    cvLoading.value = false;
   }
 }
 
@@ -477,7 +484,15 @@ function confirmApply(cmds: Array<string>): Promise<boolean> {
   );
 }
 
-onMounted(() => { timer = setInterval(() => { tick.value = Date.now(); }, 1000); });
+// Load the CV engine as soon as a bridge URL is available (on mount, and when the user first sets
+// it) rather than waiting for an alignment action — which is disabled while disconnected, so it would
+// otherwise never load and the status would sit on "not loaded". This also surfaces a bad URL /
+// missing /opencv assets immediately as a clear error.
+onMounted(() => {
+  timer = setInterval(() => { tick.value = Date.now(); }, 1000);
+  if (cfg.bridgeUrl) void ensureCv();
+});
+watch(() => cfg.bridgeUrl, (url) => { if (url && !cv.value && !cvLoading.value) void ensureCv(); });
 onBeforeUnmount(() => { aborted = true; if (timer) clearInterval(timer); });
 </script>
 

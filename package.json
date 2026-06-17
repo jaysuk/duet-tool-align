@@ -1,6 +1,6 @@
 {
   "name": "duet-tool-align",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Automated camera-based tool-offset alignment (TAMV-style) for RepRapFirmware toolchangers, as a Duet Web Control 3.7 plugin.",
   "private": true,
   "license": "GPL-3.0-or-later",
