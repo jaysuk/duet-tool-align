@@ -1,0 +1,23 @@
+# GitHub Release titles for duet-tool-align, one per line (blank lines and # comments ignored).
+# Picked by version index (semver-sorted), wrapping if it runs out. Tool-alignment puns — top up
+# the list as it gets low (the release workflow warns when few unused titles remain).
+Dead Centre
+Hole in One
+Pixel Perfect
+On the Dot
+Bang On
+Right on the Nozzle
+Crosshairs Crossed
+Offset and Match
+Centre of Attention
+The Sharpest Tool
+Focus Pocus
+Calibration Celebration
+Zero to Hero
+Bore to Be Wild
+Aligned and Dandy
+Sight for Sore Eyes
+Lock On
+Tool and the Gang
+Nozzle Knows Best
+Square Deal
