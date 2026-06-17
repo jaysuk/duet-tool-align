@@ -1,0 +1,28 @@
+{
+  "name": "duet-tool-align",
+  "version": "0.1.0",
+  "description": "Automated camera-based tool-offset alignment (TAMV-style) for RepRapFirmware toolchangers, as a Duet Web Control 3.7 plugin.",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "homepage": "https://github.com/jaysuk/duet-tool-align",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "dwc-plugin-typecheck",
+    "verify-build": "dwc-plugin-verify-build"
+  },
+  "dependencies": {
+    "dwc-plugin-runtime": "file:../dwc-plugin-runtime"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "@vitest/coverage-v8": "^4.1.8",
+    "@vue/test-utils": "^2.4.6",
+    "dwc-plugin-test-kit": "file:../dwc-plugin-test-kit-1",
+    "happy-dom": "^15.11.7",
+    "vitest": "^4.1.8",
+    "vue": "^3.5.30",
+    "vuetify": "^4.1.0"
+  }
+}

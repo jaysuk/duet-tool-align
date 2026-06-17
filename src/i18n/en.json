@@ -1,0 +1,81 @@
+{
+	"title": "Tool Align",
+	"menuCaption": "Tool Align",
+	"widget": "Auto Tool Align",
+	"embeddableDesc": "Automated camera-based tool-offset alignment for toolchangers.",
+	"noUrl": "Set the camera bridge URL in settings to begin.",
+	"noPos": "Machine position unavailable — home the printer first.",
+	"selectTool": "Select a tool first.",
+	"notHomed": "X/Y are not homed — home before aligning.",
+	"cv": {
+		"load": "Load CV engine",
+		"loading": "Loading OpenCV…",
+		"ready": "CV engine ready.",
+		"error": "Failed to load OpenCV: {msg}",
+		"notReady": "CV engine not loaded."
+	},
+	"camera": {
+		"goto": "Go to camera",
+		"set": "Set camera position",
+		"saved": "Camera position saved.",
+		"setFirst": "Set the camera position first."
+	},
+	"actions": {
+		"calibrate": "Calibrate",
+		"centre": "Centre & capture tool",
+		"runFull": "Run full alignment",
+		"stop": "Stop"
+	},
+	"calib": {
+		"done": "Calibrated: {residual} mm residual ({used} samples).",
+		"fail": "Calibration failed: {msg}",
+		"needed": "Calibrate the camera before aligning."
+	},
+	"centre": {
+		"done": "Tool centred and captured.",
+		"fail": "Centring failed: {msg}"
+	},
+	"run": {
+		"done": "Alignment complete.",
+		"aborted": "Alignment stopped."
+	},
+	"tools": {
+		"reference": "Reference tool",
+		"empty": "No tools found in the object model."
+	},
+	"offsets": {
+		"tool": "Tool",
+		"captured": "Captured X,Y",
+		"offset": "Offset X,Y",
+		"apply": "Apply",
+		"applyAll": "Apply all",
+		"save": "Save (M500)",
+		"invert": "Invert offsets",
+		"refBadge": "ref",
+		"setRef": "Set reference",
+		"capture": "Capture XY",
+		"clear": "Clear",
+		"persistHint": "Offsets are applied with G10. Use Save to persist them across reboots.",
+		"confirmTitle": "Apply tool offsets?",
+		"confirmBody": "The following commands will be sent:"
+	},
+	"settings": {
+		"title": "Settings",
+		"bridgeUrl": "Camera bridge URL",
+		"bridgeUrlHint": "e.g. http://192.168.1.50:8081",
+		"opencvUrl": "OpenCV.js URL",
+		"opencvUrlHint": "blank = <bridge>/opencv/opencv.js",
+		"referenceTool": "Reference tool",
+		"calibStepMm": "Calibration step (mm)",
+		"tolerancePx": "Tolerance (px)",
+		"gain": "Gain",
+		"settleMs": "Settle (ms)",
+		"travelFeed": "Travel feed (mm/min)",
+		"jogFeed": "Jog feed (mm/min)",
+		"minRadiusPx": "Min nozzle radius (px)",
+		"maxRadiusPx": "Max nozzle radius (px)",
+		"startCommand": "Start command",
+		"finishCommand": "Finish command",
+		"saveCommand": "Save command"
+	}
+}

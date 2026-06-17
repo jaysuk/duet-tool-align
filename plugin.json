@@ -1,0 +1,15 @@
+{
+	"id": "DuetToolAlign",
+	"name": "Duet Tool Align",
+	"author": "James Skitt",
+	"version": "0.1.0",
+	"license": "GPL-3.0-or-later",
+	"homepage": "https://github.com/jaysuk/duet-tool-align",
+	"dwcVersion": "auto-major",
+	"tags": [
+		"toolchanger",
+		"alignment",
+		"camera",
+		"calibration"
+	]
+}
