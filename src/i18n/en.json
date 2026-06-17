@@ -76,8 +76,24 @@
 		"confirmTitle": "Apply tool offsets?",
 		"confirmBody": "The following commands will be sent:"
 	},
+	"updates": {
+		"title": "Tool Align update",
+		"available": "Update available: v{version}",
+		"notifyPlugin": "Tool Align v{version} is available. Open Plugins → Tool Align to update.",
+		"notifyDwc": "Tool Align v{version} needs DuetWebControl {dwc} — update DWC first.",
+		"updateNow": "Update now",
+		"dismiss": "Dismiss",
+		"notes": "Release notes",
+		"needsDwc": "Needs DuetWebControl {dwc} (you have {running})",
+		"applyFailed": "No downloadable asset found for this release.",
+		"corsBlocked": "Couldn't fetch the update automatically — opening the download instead.",
+		"installedReload": "v{version} installed. Reload DWC to finish.",
+		"reloadPrompt": "Update installed — reload DWC to finish.",
+		"reload": "Reload"
+	},
 	"settings": {
 		"title": "Settings",
+		"updateChecks": "Check for updates",
 		"bridgeUrl": "Camera bridge URL",
 		"bridgeUrlHint": "e.g. http://192.168.1.50:8081",
 		"opencvUrl": "OpenCV.js URL",

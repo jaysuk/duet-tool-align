@@ -1,5 +1,26 @@
 <template>
   <div class="aa-root fill-height d-flex flex-column">
+    <!-- Update notice (also surfaced in Flexible Layouts' unified popup via the shared hub) -->
+    <v-alert v-if="pendingReload" type="success" density="compact" variant="tonal" class="ma-1">
+      {{ $t("plugins.duetToolAlign.updates.reloadPrompt") }}
+      <template #append>
+        <v-btn size="small" variant="tonal" @click="reloadPage">{{ $t("plugins.duetToolAlign.updates.reload") }}</v-btn>
+      </template>
+    </v-alert>
+    <v-alert v-else-if="updateBannerVisible" type="info" density="compact" variant="tonal" class="ma-1">
+      {{ $t("plugins.duetToolAlign.updates.available", { version: updateState!.latestVersion }) }}
+      <template #append>
+        <div class="d-flex align-center ga-1 flex-wrap">
+          <v-btn v-if="updateState!.scenario === 'pluginUpdate'" size="small" color="primary" variant="flat" :loading="applying" @click="applyUpdateNow">
+            {{ $t("plugins.duetToolAlign.updates.updateNow") }}
+          </v-btn>
+          <span v-else class="text-caption">{{ $t("plugins.duetToolAlign.updates.needsDwc", { dwc: updateState!.requiredDwc, running: updateState!.runningDwc }) }}</span>
+          <v-btn size="small" variant="text" :href="updateState!.releaseUrl || undefined" target="_blank" rel="noopener">{{ $t("plugins.duetToolAlign.updates.notes") }}</v-btn>
+          <v-btn size="small" variant="text" @click="dismissCurrentUpdate">{{ $t("plugins.duetToolAlign.updates.dismiss") }}</v-btn>
+        </div>
+      </template>
+    </v-alert>
+
     <!-- Camera with crosshair + detected-circle overlay -->
     <div class="aa-cam flex-grow-1">
       <div v-if="!cfg.bridgeUrl" class="aa-setup pa-3">
@@ -48,7 +69,7 @@
       <span class="text-caption text-medium-emphasis mr-1">{{ $t("plugins.duetToolAlign.focus.label") }}</span>
       <v-btn size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(-1)">Z−</v-btn>
       <v-btn size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(1)">Z+</v-btn>
-      <v-tooltip location="top" max-width="280" text="Z distance per -Z/+Z press (mm), to bring the nozzle into focus. Typical 0.02–0.2.">
+      <v-tooltip location="top" max-width="280" text="Z distance per -Z/+Z press (mm), to bring the nozzle into focus. Typical 0.02–0.2. (default: 0.05)">
         <template #activator="{ props }">
           <v-text-field v-bind="props" v-model.number="cfg.zStep" type="number" min="0.01" max="2" step="0.01"
                         density="compact" variant="outlined" hide-details class="aa-narrow" suffix="mm" />
@@ -63,7 +84,7 @@
       <v-btn size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('X', 1)">X+</v-btn>
       <v-btn size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('Y', -1)">Y−</v-btn>
       <v-btn size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('Y', 1)">Y+</v-btn>
-      <v-tooltip location="top" max-width="280" text="X/Y jog distance per button press (mm). Use a big step to bring a far-off tool into frame, then a small step to fine-tune.">
+      <v-tooltip location="top" max-width="280" text="X/Y jog distance per button press (mm). Use a big step to bring a far-off tool into frame, then a small step to fine-tune. (default: 0.1)">
         <template #activator="{ props }">
           <v-text-field v-bind="props" v-model.number="cfg.xyStep" type="number" min="0.01" max="50" step="0.05"
                         density="compact" variant="outlined" hide-details class="aa-narrow" suffix="mm" />
@@ -180,7 +201,7 @@
                       density="compact" variant="outlined" hide-details class="aa-select"
                       :label="$t('plugins.duetToolAlign.settings.referenceMode')">
               <template #append-inner>
-                <v-tooltip location="top" max-width="320" text="How the 0,0 origin is defined. Reference tool: a tool (e.g. T0) is the origin, others are relative to it. Carriage datum: a fixed point on the carriage (e.g. the E3D toolchanger switch) is the origin — capture it once and every tool is offset from it.">
+                <v-tooltip location="top" max-width="320" text="How the 0,0 origin is defined. Reference tool: a tool (e.g. T0) is the origin, others are relative to it. Carriage datum: a fixed point on the carriage (e.g. the E3D toolchanger switch) is the origin — capture it once and every tool is offset from it. (default: Reference tool)">
                   <template #activator="{ props }"><v-icon v-bind="props" size="16" color="medium-emphasis">mdi-information-outline</v-icon></template>
                 </v-tooltip>
               </template>
@@ -190,11 +211,17 @@
                           density="compact" variant="outlined" hide-details class="aa-field"
                           :label="$t('plugins.duetToolAlign.settings.' + f.key)">
               <template #append-inner>
-                <v-tooltip location="top" max-width="300" :text="f.tip">
+                <v-tooltip location="top" max-width="300" :text="fieldTip(f)">
                   <template #activator="{ props }"><v-icon v-bind="props" size="16" color="medium-emphasis">mdi-information-outline</v-icon></template>
                 </v-tooltip>
               </template>
             </v-text-field>
+            <v-tooltip location="top" max-width="300" text="Check GitHub for a newer plugin release on load and show it (here and in Flexible Layouts' unified popup). (default: on)">
+              <template #activator="{ props }">
+                <v-switch v-bind="props" v-model="updateChecks" density="compact" hide-details color="primary"
+                          :label="$t('plugins.duetToolAlign.settings.updateChecks')" />
+              </template>
+            </v-tooltip>
           </div>
 
           <div class="text-caption text-medium-emphasis mt-2 mb-1">{{ $t("plugins.duetToolAlign.settings.detectionHeading") }}</div>
@@ -202,13 +229,13 @@
             <v-select v-model="cfg.detector" :items="detectorItems" item-title="title" item-value="value"
                       density="compact" variant="outlined" hide-details class="aa-select"
                       :label="$t('plugins.duetToolAlign.settings.detector')" />
-            <v-tooltip location="top" max-width="300" text="Pick the largest detected circle instead of the one nearest the crosshair. Handy while the nozzle is off-centre during tuning; turn off for centring.">
+            <v-tooltip location="top" max-width="300" text="Pick the largest detected circle instead of the one nearest the crosshair. Handy while the nozzle is off-centre during tuning; turn off for centring. (default: off)">
               <template #activator="{ props }">
                 <v-switch v-bind="props" v-model="cfg.pickLargest" density="compact" hide-details color="primary"
                           :label="$t('plugins.duetToolAlign.settings.pickLargest')" />
               </template>
             </v-tooltip>
-            <v-tooltip v-if="cfg.detector === 'contour'" location="top" max-width="300" text="The bore is darker than the nozzle, so threshold keeps the dark pixels. Turn off only if your target is brighter than its surroundings.">
+            <v-tooltip v-if="cfg.detector === 'contour'" location="top" max-width="300" text="The bore is darker than the nozzle, so threshold keeps the dark pixels. Turn off only if your target is brighter than its surroundings. (default: on)">
               <template #activator="{ props }">
                 <v-switch v-bind="props" v-model="cfg.darkBore" density="compact" hide-details color="primary"
                           :label="$t('plugins.duetToolAlign.settings.darkBore')" />
@@ -221,7 +248,7 @@
                           density="compact" variant="outlined" hide-details class="aa-field"
                           :label="$t('plugins.duetToolAlign.settings.' + f.key)">
               <template #append-inner>
-                <v-tooltip location="top" max-width="300" :text="f.tip">
+                <v-tooltip location="top" max-width="300" :text="fieldTip(f)">
                   <template #activator="{ props }"><v-icon v-bind="props" size="16" color="medium-emphasis">mdi-information-outline</v-icon></template>
                 </v-tooltip>
               </template>
@@ -243,13 +270,14 @@ import { LogLevel, useUiStore } from "@/stores/ui";
 
 import { type AxisCapture, computeToolOffset, formatG10, type ToolOffset } from "../util/toolAlign";
 import { resolveOmPath } from "../util/omPath";
-import { type AutoAlignConfig, resolveOpencvUrl, useConfig } from "../model/document";
+import { type AutoAlignConfig, defaultConfig, resolveOpencvUrl, useConfig } from "../model/document";
 import { type DetectParams, pickLargest, pickNearestToCentre } from "../cv/detectNozzle";
 import { WorkerDetector } from "../cv/detectorWorker";
 import { grabFrame } from "../cv/frameGrabber";
 import { medianPoint } from "../cv/geometry";
 import type { Mat2, Vec2 } from "../cv/geometry";
 import { centreTool, type MachineIO, runCalibration } from "../model/orchestrator";
+import { applying, dismissCurrentUpdate, dismissedVersion, applyUpdateNow, pendingReload, updateChecksEnabled, setUpdateChecksEnabled, updateState } from "../model/updateCheck";
 
 // Optional config injection (FL merge / standalone page may pass one); embeddable use passes none, so
 // fall back to the persisted settings-store config.
@@ -749,6 +777,22 @@ function getNum(key: string): number {
 }
 function setNum(key: string, val: unknown): void {
   (cfg as unknown as Record<string, number>)[key] = val === "" || val === null || val === undefined ? 0 : Number(val);
+}
+// Tooltip text with the built-in default appended, so the user always knows the original value.
+const DEFAULTS = defaultConfig() as unknown as Record<string, unknown>;
+function fieldTip(f: NumField): string {
+  return `${f.tip} (default: ${DEFAULTS[f.key]})`;
+}
+
+// --- Update notification (announced into the shared hub; banner is the in-context surface) ---
+const updateBannerVisible = computed(() =>
+  !!updateState.value?.updateAvailable && updateState.value.latestVersion !== dismissedVersion.value);
+const updateChecks = computed({
+  get: () => updateChecksEnabled(),
+  set: (v: boolean) => setUpdateChecksEnabled(v),
+});
+function reloadPage(): void {
+  window.location.reload();
 }
 
 // Load the CV engine as soon as a bridge URL is available (on mount, and when the user first sets

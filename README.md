@@ -17,28 +17,51 @@ nozzle tip, jogs each tool over the lens, and computes the per-tool `G10 X/Y` of
   `/opencv/`). Point the plugin at the bridge URL in its settings.
 - **Detection** runs OpenCV.js entirely in the browser — no second service to install.
 - **Calibration** jogs a small star of known moves and solves a pixel→mm transform.
-- **Alignment** iteratively centres each nozzle on the frame centre, records the machine XY, and
-  derives offsets relative to a reference tool.
+- **Alignment** iteratively centres each nozzle on the crosshair, records the machine XY, and derives
+  per-tool offsets from the chosen origin.
 
 Scope is **XY only** (matching TAMV's core); Z offsets stay with your existing method.
 
+**📖 Full instructions: [docs/usage.md](docs/usage.md)** — setup, both offset workflows, detection
+tuning, the settings reference, and troubleshooting.
+
+## Two offset workflows
+
+Set the origin in **Settings → Reference**:
+
+- **Reference tool** (e.g. T0) — that tool is the origin; other tools are measured relative to it.
+  The common RRF-toolchanger convention.
+- **Carriage datum** (e.g. the E3D toolchanger switch) — a fixed carriage point is the origin; capture
+  it once and **every** tool (T0 included) is offset from it.
+
+See [docs/usage.md §4–5](docs/usage.md#4-choosing-the-reference-origin) for step-by-step.
+
 ## Install
 
-1. Build the ZIP (see below) or grab a release.
-2. In DWC: **Settings → Plugins → Install plugin**, pick the ZIP, then **Start** it.
-3. Open **Plugins → Tool Align**, set the **camera bridge URL** in the settings panel, set the
-   **camera position**, then **Calibrate** and **Run full alignment**.
+1. Download `DuetToolAlign-<version>.zip` from [Releases](../../releases) (or build it — see below).
+2. In DWC: **Settings → General → Plugins → Install Plugin**, pick the ZIP, accept the prompt, **Start**.
+3. **Reload DWC**, open **Plugins → Tool Align**, set the **camera bridge URL**, set the **camera
+   position**, tune with **Detect**, then **Calibrate** → **Run full alignment**.
 
-It's also exposed as an **embeddable component**, so if [Flexible
-Layouts](https://github.com/jaysuk/Flexible-Layouts) is installed you can drop the *Auto Tool Align*
-panel straight into a grid.
+Requires **[duet-webcam-bridge](https://github.com/jaysuk/duet-webcam-bridge) ≥ 0.5.1** (camera CORS +
+the OpenCV.js runtime at `/opencv/`). It's also exposed as an **embeddable component**, so if
+[Flexible Layouts](https://github.com/jaysuk/Flexible-Layouts) is installed you can drop the
+*Auto Tool Align* panel straight into a grid.
+
+## Releasing
+
+`npm run release -- <version> --push` bumps `plugin.json`+`package.json`, commits, tags `vX.Y.Z`, and
+pushes; the [release workflow](.github/workflows/release.yml) then builds the ZIP against DWC and
+publishes a GitHub Release with generated notes. Updates are surfaced in-app (and in Flexible Layouts'
+unified update popup via the shared `dwc-plugin-runtime` hub).
 
 ## Status
 
-Early. The pure CV/calibration/control maths and the motion/G-code orchestration are unit-tested
-(`npm test`); end-to-end on real hardware is the next step. This started life as a standalone plugin
-and is intended to fold into Flexible Layouts once proven — the offset maths (`src/util/toolAlign.ts`)
-is copied verbatim from FL to keep that merge trivial.
+The pure CV/calibration/control maths and the motion/G-code orchestration are unit-tested
+(`npm test`). Single-tool detection/calibration/centring is exercisable on hardware; multi-tool
+sequences await a multi-tool machine. This started as a standalone plugin and is intended to fold into
+Flexible Layouts once proven — the offset maths (`src/util/toolAlign.ts`) is copied verbatim from FL
+to keep that merge trivial.
 
 ## Building
 
