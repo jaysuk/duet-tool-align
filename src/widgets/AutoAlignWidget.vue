@@ -8,7 +8,7 @@
                       :label="$t('plugins.duetToolAlign.settings.bridgeUrl')"
                       :placeholder="$t('plugins.duetToolAlign.settings.bridgeUrlHint')" />
       </div>
-      <img v-else :src="streamSrc" class="aa-img" @error="onImgError" />
+      <img v-else ref="imgEl" :src="streamSrc" class="aa-img" @error="onImgError" />
 
       <div class="aa-overlay">
         <div class="aa-cross-h" />
@@ -238,12 +238,23 @@ const lastDetection = ref<Vec2 | null>(null);
 const lastRadius = ref(0);
 const frameW = ref(0);
 const frameH = ref(0);
+const imgEl = ref<HTMLImageElement | null>(null);
+// Map the detected circle (in original frame pixels) onto the displayed <img>, accounting for the
+// letterbox (object-fit: contain) so the marker sits exactly on what was detected and is drawn at the
+// real detected radius. Recomputes each detection (lastDetection/lastRadius change).
 const detectionStyle = computed(() => {
   const d = lastDetection.value;
-  if (!d || !frameW.value || !frameH.value) return null;
-  const cx = (d.x / frameW.value) * 100;
-  const cy = (d.y / frameH.value) * 100;
-  return { left: `${cx}%`, top: `${cy}%` };
+  const img = imgEl.value;
+  if (!d || !img || !frameW.value || !img.clientWidth) return null;
+  const scale = img.clientWidth / frameW.value;
+  if (!isFinite(scale) || scale <= 0) return null;
+  const diam = Math.max(8, 2 * lastRadius.value * scale);
+  return {
+    left: `${img.offsetLeft + d.x * scale}px`,
+    top: `${img.offsetTop + d.y * scale}px`,
+    width: `${diam}px`,
+    height: `${diam}px`,
+  };
 });
 
 // --- Status --------------------------------------------------------------------
@@ -590,7 +601,8 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearInterval(timer); detecto
 .aa-overlay { position: absolute; inset: 0; pointer-events: none; }
 .aa-cross-h { position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid #39ff14; }
 .aa-cross-v { position: absolute; top: 0; bottom: 0; left: 50%; border-left: 1px solid #39ff14; }
-.aa-circle { position: absolute; width: 14px; height: 14px; transform: translate(-50%, -50%); border: 2px solid #ff3b30; border-radius: 50%; box-shadow: 0 0 4px #ff3b30; }
+/* width/height/left/top come from detectionStyle (the real detected radius, letterbox-corrected). */
+.aa-circle { position: absolute; transform: translate(-50%, -50%); border: 2px solid #ff3b30; border-radius: 50%; box-shadow: 0 0 4px #ff3b30; }
 
 .aa-status-info { color: rgba(127, 127, 127, 0.95); }
 .aa-status-ok { color: #2e7d32; }
