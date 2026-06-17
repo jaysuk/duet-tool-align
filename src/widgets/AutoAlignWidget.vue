@@ -48,8 +48,12 @@
       <span class="text-caption text-medium-emphasis mr-1">{{ $t("plugins.duetToolAlign.focus.label") }}</span>
       <v-btn size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(-1)">Z−</v-btn>
       <v-btn size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(1)">Z+</v-btn>
-      <v-text-field v-model.number="cfg.zStep" type="number" density="compact" variant="outlined" hide-details
-                    class="aa-narrow" suffix="mm" />
+      <v-tooltip location="top" max-width="280" text="Z distance per -Z/+Z press (mm), to bring the nozzle into focus. Typical 0.02–0.2.">
+        <template #activator="{ props }">
+          <v-text-field v-bind="props" v-model.number="cfg.zStep" type="number" min="0.01" max="2" step="0.01"
+                        density="compact" variant="outlined" hide-details class="aa-narrow" suffix="mm" />
+        </template>
+      </v-tooltip>
     </div>
 
     <!-- Camera position + primary actions -->
@@ -127,43 +131,54 @@
       <v-expansion-panel :title="$t('plugins.duetToolAlign.settings.title')">
         <v-expansion-panel-text>
           <v-text-field v-model="cfg.bridgeUrl" density="compact" variant="outlined" hide-details class="mb-2"
-                        :label="$t('plugins.duetToolAlign.settings.bridgeUrl')" :placeholder="$t('plugins.duetToolAlign.settings.bridgeUrlHint')" />
-          <v-text-field v-model="cfg.opencvUrl" density="compact" variant="outlined" hide-details class="mb-2"
-                        :label="$t('plugins.duetToolAlign.settings.opencvUrl')" :placeholder="$t('plugins.duetToolAlign.settings.opencvUrlHint')" />
-          <div class="d-flex ga-2 flex-wrap">
-            <v-text-field v-model.number="cfg.referenceTool" type="number" density="compact" variant="outlined" hide-details
-                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.referenceTool')" />
-            <v-text-field v-model.number="cfg.calibStepMm" type="number" density="compact" variant="outlined" hide-details
-                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.calibStepMm')" />
-            <v-text-field v-model.number="cfg.tolerancePx" type="number" density="compact" variant="outlined" hide-details
-                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.tolerancePx')" />
-            <v-text-field v-model.number="cfg.gain" type="number" density="compact" variant="outlined" hide-details
-                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.gain')" />
-            <v-text-field v-model.number="cfg.settleMs" type="number" density="compact" variant="outlined" hide-details
-                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.settleMs')" />
-            <v-text-field v-model.number="cfg.minRadiusPx" type="number" density="compact" variant="outlined" hide-details
-                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.minRadiusPx')" />
-            <v-text-field v-model.number="cfg.maxRadiusPx" type="number" density="compact" variant="outlined" hide-details
-                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.maxRadiusPx')" />
+                        :label="$t('plugins.duetToolAlign.settings.bridgeUrl')" :placeholder="$t('plugins.duetToolAlign.settings.bridgeUrlHint')">
+            <template #append-inner>
+              <v-tooltip location="top" max-width="300" text="Base URL of the duet-webcam-bridge, e.g. http://192.168.1.50:8081 — used for the camera stream and to load the CV engine.">
+                <template #activator="{ props }"><v-icon v-bind="props" size="16" color="medium-emphasis">mdi-information-outline</v-icon></template>
+              </v-tooltip>
+            </template>
+          </v-text-field>
+          <v-text-field v-model="cfg.opencvUrl" density="compact" variant="outlined" hide-details class="mb-3"
+                        :label="$t('plugins.duetToolAlign.settings.opencvUrl')" :placeholder="$t('plugins.duetToolAlign.settings.opencvUrlHint')">
+            <template #append-inner>
+              <v-tooltip location="top" max-width="300" text="Override the OpenCV.js URL. Leave blank to use <bridge>/opencv/opencv.js (recommended).">
+                <template #activator="{ props }"><v-icon v-bind="props" size="16" color="medium-emphasis">mdi-information-outline</v-icon></template>
+              </v-tooltip>
+            </template>
+          </v-text-field>
+
+          <div class="text-caption text-medium-emphasis mb-1">{{ $t("plugins.duetToolAlign.settings.alignmentHeading") }}</div>
+          <div class="d-flex ga-2 flex-wrap mb-2">
+            <v-text-field v-for="f in alignFields" :key="f.key" :model-value="getNum(f.key)" @update:model-value="setNum(f.key, $event)"
+                          type="number" :min="f.min" :max="f.max" :step="f.step ?? 1"
+                          density="compact" variant="outlined" hide-details class="aa-field"
+                          :label="$t('plugins.duetToolAlign.settings.' + f.key)">
+              <template #append-inner>
+                <v-tooltip location="top" max-width="300" :text="f.tip">
+                  <template #activator="{ props }"><v-icon v-bind="props" size="16" color="medium-emphasis">mdi-information-outline</v-icon></template>
+                </v-tooltip>
+              </template>
+            </v-text-field>
           </div>
 
-          <div class="text-caption text-medium-emphasis mt-3 mb-1">{{ $t("plugins.duetToolAlign.settings.detectionHeading") }}</div>
+          <div class="text-caption text-medium-emphasis mt-2 mb-1">{{ $t("plugins.duetToolAlign.settings.detectionHeading") }}</div>
           <div class="d-flex ga-2 flex-wrap align-center">
-            <v-text-field v-model.number="cfg.houghParam2" type="number" density="compact" variant="outlined" hide-details
-                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.houghParam2')"
-                          :hint="$t('plugins.duetToolAlign.settings.houghParam2Hint')" persistent-hint />
-            <v-text-field v-model.number="cfg.houghParam1" type="number" density="compact" variant="outlined" hide-details
-                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.houghParam1')" />
-            <v-text-field v-model.number="cfg.houghDp" type="number" step="0.1" density="compact" variant="outlined" hide-details
-                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.houghDp')" />
-            <v-text-field v-model.number="cfg.houghMinDist" type="number" density="compact" variant="outlined" hide-details
-                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.houghMinDist')" />
-            <v-text-field v-model.number="cfg.blurKsize" type="number" density="compact" variant="outlined" hide-details
-                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.blurKsize')" />
-            <v-text-field v-model.number="cfg.detectWidth" type="number" density="compact" variant="outlined" hide-details
-                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.detectWidth')" />
-            <v-switch v-model="cfg.pickLargest" density="compact" hide-details color="primary"
-                      :label="$t('plugins.duetToolAlign.settings.pickLargest')" />
+            <v-text-field v-for="f in detectFields" :key="f.key" :model-value="getNum(f.key)" @update:model-value="setNum(f.key, $event)"
+                          type="number" :min="f.min" :max="f.max" :step="f.step ?? 1"
+                          density="compact" variant="outlined" hide-details class="aa-field"
+                          :label="$t('plugins.duetToolAlign.settings.' + f.key)">
+              <template #append-inner>
+                <v-tooltip location="top" max-width="300" :text="f.tip">
+                  <template #activator="{ props }"><v-icon v-bind="props" size="16" color="medium-emphasis">mdi-information-outline</v-icon></template>
+                </v-tooltip>
+              </template>
+            </v-text-field>
+            <v-tooltip location="top" max-width="300" text="Pick the largest detected circle instead of the one nearest the crosshair. Handy while the nozzle is off-centre during tuning; turn off for centring.">
+              <template #activator="{ props }">
+                <v-switch v-bind="props" v-model="cfg.pickLargest" density="compact" hide-details color="primary"
+                          :label="$t('plugins.duetToolAlign.settings.pickLargest')" />
+              </template>
+            </v-tooltip>
           </div>
         </v-expansion-panel-text>
       </v-expansion-panel>
@@ -185,6 +200,7 @@ import { type AutoAlignConfig, resolveOpencvUrl, useConfig } from "../model/docu
 import { type DetectParams, pickLargest, pickNearestToCentre } from "../cv/detectNozzle";
 import { WorkerDetector } from "../cv/detectorWorker";
 import { grabFrame } from "../cv/frameGrabber";
+import { medianPoint } from "../cv/geometry";
 import type { Mat2, Vec2 } from "../cv/geometry";
 import { centreTool, type MachineIO, runCalibration } from "../model/orchestrator";
 
@@ -236,6 +252,7 @@ function onImgError(): void { /* retried by the refresh tick */ }
 
 const lastDetection = ref<Vec2 | null>(null);
 const lastRadius = ref(0);
+const smoothBuf: Array<Vec2> = []; // recent raw detections for display smoothing
 const frameW = ref(0);
 const frameH = ref(0);
 const imgEl = ref<HTMLImageElement | null>(null);
@@ -331,9 +348,16 @@ async function detectOnce(): Promise<Vec2 | null> {
     // detect() transfers the pixel buffer to the worker, so read dimensions/centre first.
     const circles = await detector.detect(img, detectParams());
     const c = cfg.pickLargest ? pickLargest(circles) : pickNearestToCentre(circles, centre);
-    lastDetection.value = c ? { x: c.x, y: c.y } : null;
-    lastRadius.value = c ? c.r : 0;
-    return lastDetection.value;
+    if (!c) { smoothBuf.length = 0; lastDetection.value = null; lastRadius.value = 0; return null; }
+    const raw = { x: c.x, y: c.y };
+    // Median-smooth the DISPLAYED marker so a jumpy lock reads steadily. The raw point is what we
+    // return to the orchestrator (its detectStable does its own validated averaging per move).
+    const n = Math.max(1, Math.round(cfg.smoothing || 1));
+    smoothBuf.push(raw);
+    while (smoothBuf.length > n) smoothBuf.shift();
+    lastDetection.value = medianPoint(smoothBuf);
+    lastRadius.value = c.r;
+    return raw;
   } catch (e) {
     setStatus((e as Error).message, "error");
     return null;
@@ -577,6 +601,37 @@ function confirmApply(cmds: Array<string>): Promise<boolean> {
   );
 }
 
+// --- Settings metadata (drives the Settings fields with tooltips + ranges) ---
+interface NumField { key: string; min?: number; max?: number; step?: number; tip: string }
+const alignFields: Array<NumField> = [
+  { key: "referenceTool", min: 0, step: 1, tip: "Tool number used as the origin that all other tools' offsets are measured against. Usually 0." },
+  { key: "calibStepMm", min: 0.05, max: 5, step: 0.05, tip: "Half-size of the calibration jog star (mm). Big enough to move the nozzle a clear distance in view, small enough to stay in frame. Typical 0.3–1.0." },
+  { key: "tolerancePx", min: 0.5, max: 15, step: 0.5, tip: "How close (px) repeated detections must agree to count as locked, and how near the crosshair counts as centred. Raise if the lock is jumpy; lower for more precision. Typical 1–4." },
+  { key: "smoothing", min: 1, max: 15, step: 1, tip: "Frames median-averaged for the on-screen marker, to steady a jumpy lock. 1 = off. Display only — does not affect captured positions. Typical 3–7." },
+  { key: "gain", min: 0.1, max: 1.5, step: 0.05, tip: "Fraction of each computed correction applied per centring step. Lower = slower but stable; higher = faster but can overshoot. Typical 0.5–0.9." },
+  { key: "maxStepMm", min: 0.1, max: 10, step: 0.1, tip: "Clamp on a single centring jog (mm), so a bad detection can't fling the toolhead. Typical 0.5–3." },
+  { key: "maxIterations", min: 5, max: 100, step: 1, tip: "Maximum centring jogs before giving up on a tool. Typical 15–40." },
+  { key: "settleMs", min: 0, max: 3000, step: 50, tip: "Pause after each move before grabbing a frame, letting vibration/ooze settle (ms). Typical 200–800." },
+  { key: "travelFeed", min: 100, max: 30000, step: 100, tip: "Feed rate (mm/min) for travel moves to the camera position. e.g. 6000." },
+  { key: "jogFeed", min: 60, max: 12000, step: 60, tip: "Feed rate (mm/min) for small calibration/centring/Z-focus jogs. e.g. 1200." },
+];
+const detectFields: Array<NumField> = [
+  { key: "minRadiusPx", min: 1, max: 1000, step: 1, tip: "Smallest circle radius accepted (original-frame px). Raise to reject small specks / the inner dark dot. Watch the r= readout." },
+  { key: "maxRadiusPx", min: 1, max: 2000, step: 1, tip: "Largest circle radius accepted (original-frame px). Must be above the bore radius or the bore won't be found. Watch the r= readout." },
+  { key: "houghParam2", min: 1, max: 300, step: 1, tip: "Detection sensitivity (Hough accumulator threshold). LOWER finds more circles (and more false ones); higher is stricter. The main knob. Typical 20–80." },
+  { key: "houghParam1", min: 10, max: 400, step: 5, tip: "Edge sensitivity (Canny high threshold). Higher = only strong edges, ignoring faint surface texture. Typical 80–200." },
+  { key: "houghDp", min: 1, max: 3, step: 0.1, tip: "Accumulator resolution (inverse). 1 = full detail; 1.5–2 finds rougher/blurrier circles, less accurately. Typical 1–2." },
+  { key: "houghMinDist", min: 0, max: 2000, step: 5, tip: "Minimum distance between detected circle centres (px). 0 = auto (frame/8). Raise to avoid several overlapping detections." },
+  { key: "blurKsize", min: 0, max: 21, step: 2, tip: "Median blur kernel (odd number) applied before detection to suppress speckle/glitter. 0 or 1 = off. Typical 3–9." },
+  { key: "detectWidth", min: 160, max: 2000, step: 20, tip: "Frame is downscaled to this width for detection speed (coords scaled back). Lower = faster, less precise. Typical 480–1000." },
+];
+function getNum(key: string): number {
+  return (cfg as unknown as Record<string, number>)[key];
+}
+function setNum(key: string, val: unknown): void {
+  (cfg as unknown as Record<string, number>)[key] = val === "" || val === null || val === undefined ? 0 : Number(val);
+}
+
 // Load the CV engine as soon as a bridge URL is available (on mount, and when the user first sets
 // it) rather than waiting for an alignment action — which is disabled while disconnected, so it would
 // otherwise never load and the status would sit on "not loaded". This also surfaces a bad URL /
@@ -610,6 +665,7 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearInterval(timer); detecto
 
 .aa-btn { min-width: 0; }
 .aa-narrow { max-width: 120px; }
+.aa-field { max-width: 160px; }
 
 .aa-table { min-height: 0; overflow: auto; }
 .aa-grid { width: 100%; border-collapse: collapse; font-size: 0.8em; }

@@ -49,6 +49,8 @@ export interface AutoAlignConfig {
 	tolerancePx: number;
 	gain: number;
 	maxStepMm: number;
+	/** Frames median-averaged for the displayed detection marker, to steady a jumpy lock. 1 = off. */
+	smoothing: number;
 	/** Max iterations for the per-tool centring loop before giving up. */
 	maxIterations: number;
 
@@ -97,9 +99,10 @@ export function defaultConfig(): AutoAlignConfig {
 		jogFeed: 1200,
 		calibStepMm: 0.5,
 		settleMs: 400,
-		tolerancePx: 1,
+		tolerancePx: 2,
 		gain: 0.8,
 		maxStepMm: 2,
+		smoothing: 3,
 		maxIterations: 25,
 		minRadiusPx: 5,
 		maxRadiusPx: 120,
