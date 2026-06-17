@@ -56,6 +56,26 @@ export interface AutoAlignConfig {
 	minRadiusPx: number;
 	maxRadiusPx: number;
 
+	/** --- HoughCircles detection tuning (exposed for live tuning) --- */
+	/** Inverse accumulator resolution. 1 = full res; higher finds rougher circles. */
+	houghDp: number;
+	/** Canny high threshold (edge sensitivity). */
+	houghParam1: number;
+	/** Accumulator threshold — LOWER finds more (and weaker) circles. The main knob. */
+	houghParam2: number;
+	/** Minimum distance between detected circle centres, in px. 0 = auto (frame/8). */
+	houghMinDist: number;
+	/** Median blur kernel size (odd). 0 or 1 = no blur. */
+	blurKsize: number;
+	/** Downscale width for detection, in px (coords are scaled back). 0 = no downscale. */
+	detectWidth: number;
+	/** Pick the largest candidate circle instead of the one nearest frame centre. Useful while the
+	 *  nozzle is deliberately off-centre during tuning; centring works better with "nearest". */
+	pickLargest: boolean;
+
+	/** Z focus jog step, in mm (the -Z/+Z buttons that sharpen the image). */
+	zStep: number;
+
 	/** Optional macros run at the start/finish of a full alignment run, and to persist offsets. */
 	startCommand: string;
 	finishCommand: string;
@@ -83,6 +103,14 @@ export function defaultConfig(): AutoAlignConfig {
 		maxIterations: 25,
 		minRadiusPx: 5,
 		maxRadiusPx: 120,
+		houghDp: 1,
+		houghParam1: 100,
+		houghParam2: 30,
+		houghMinDist: 0,
+		blurKsize: 5,
+		detectWidth: 800,
+		pickLargest: false,
+		zStep: 0.05,
 		startCommand: "",
 		finishCommand: "",
 		saveCommand: "M500",

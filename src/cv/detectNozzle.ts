@@ -29,6 +29,30 @@ export function pickNearestToCentre(circles: Array<Circle>, centre: Vec2): Circl
 	return best;
 }
 
+/** Pick the largest candidate circle (the nozzle bore is usually the dominant circular feature). */
+export function pickLargest(circles: Array<Circle>): Circle | null {
+	let best: Circle | null = null;
+	for (const c of circles) {
+		if (!best || c.r > best.r) best = c;
+	}
+	return best;
+}
+
+/** Tunable HoughCircles parameters passed from the UI to the detector. */
+export interface DetectParams {
+	minRadius: number;
+	maxRadius: number;
+	dp: number;
+	param1: number;
+	param2: number;
+	/** 0 = auto (min(w,h)/8). */
+	minDist: number;
+	/** Median blur kernel; 0/1 = none. */
+	blur: number;
+	/** Downscale width; 0 = none. */
+	detectWidth: number;
+}
+
 /**
  * Tracks detections across frames and reports a lock once the centre has been stable: the last
  * `samples` detections all lie within `tolPx` of their running mean. Mirrors kTAMV's "same point N

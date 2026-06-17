@@ -24,7 +24,16 @@
 		"calibrate": "Calibrate",
 		"centre": "Centre & capture tool",
 		"runFull": "Run full alignment",
+		"detect": "Detect",
+		"stopDetect": "Stop detect",
 		"stop": "Stop"
+	},
+	"focus": {
+		"label": "Focus (Z)"
+	},
+	"detect": {
+		"found": "Detected at {x},{y}  r={r}px",
+		"none": "No nozzle found — adjust focus, radius range, or sensitivity"
 	},
 	"calib": {
 		"done": "Calibrated: {residual} mm residual ({used} samples).",
@@ -74,6 +83,15 @@
 		"jogFeed": "Jog feed (mm/min)",
 		"minRadiusPx": "Min nozzle radius (px)",
 		"maxRadiusPx": "Max nozzle radius (px)",
+		"detectionHeading": "Detection (HoughCircles) — tune with live Detect running",
+		"houghParam2": "Sensitivity",
+		"houghParam2Hint": "lower = finds more",
+		"houghParam1": "Edge threshold",
+		"houghDp": "Accumulator dp",
+		"houghMinDist": "Min centre dist (px, 0=auto)",
+		"blurKsize": "Blur kernel (odd)",
+		"detectWidth": "Detect width (px)",
+		"pickLargest": "Pick largest circle (not nearest centre)",
 		"startCommand": "Start command",
 		"finishCommand": "Finish command",
 		"saveCommand": "Save command"

@@ -30,6 +30,8 @@ export interface MotionParams {
 	maxStepMm: number;
 	maxIterations: number;
 	calibStepMm: number;
+	/** Returns true to abort in-progress loops promptly (wired to the Stop button). */
+	shouldAbort?: () => boolean;
 }
 
 /** Hook for progress/status reporting to the UI. */
@@ -58,13 +60,14 @@ async function jog(io: MachineIO, dx: number, dy: number, params: MotionParams):
  */
 export async function detectStable(
 	detectOnce: DetectOnce,
-	opts: { tolPx: number; samples?: number; attempts?: number },
+	opts: { tolPx: number; samples?: number; attempts?: number; shouldAbort?: () => boolean },
 	progress?: ProgressSink,
 ): Promise<Vec2 | null> {
 	const samples = opts.samples ?? 3;
 	const attempts = opts.attempts ?? 30;
 	const history: Array<Vec2> = [];
 	for (let i = 0; i < attempts; i++) {
+		if (opts.shouldAbort?.()) return null;
 		const p = await detectOnce();
 		progress?.detection?.(p);
 		if (!p) {
@@ -94,9 +97,11 @@ export async function runCalibration(
 	params: MotionParams,
 	progress?: ProgressSink,
 ): Promise<CalibrationResult> {
+	const abort = params.shouldAbort;
 	progress?.status?.("Detecting nozzle at start…");
 	if (params.settleMs > 0) await sleep(params.settleMs);
-	const origin = await detectStable(detectOnce, { tolPx: params.tolerancePx }, progress);
+	const origin = await detectStable(detectOnce, { tolPx: params.tolerancePx, shouldAbort: abort }, progress);
+	if (abort?.()) return { ok: false, error: "aborted" };
 	if (!origin) return { ok: false, error: "could not lock onto the nozzle at the start position" };
 
 	const waypoints = calibrationPattern(params.calibStepMm);
@@ -104,18 +109,20 @@ export async function runCalibration(
 	let current: Vec2 = { x: 0, y: 0 }; // current offset from start, in mm
 
 	for (let i = 0; i < waypoints.length; i++) {
+		if (abort?.()) break;
 		const wp = waypoints[i];
 		progress?.status?.(`Calibrating ${i + 1}/${waypoints.length}…`);
 		await jog(io, wp.x - current.x, wp.y - current.y, params);
 		current = wp;
-		const px = await detectStable(detectOnce, { tolPx: params.tolerancePx }, progress);
+		const px = await detectStable(detectOnce, { tolPx: params.tolerancePx, shouldAbort: abort }, progress);
 		if (px) {
 			samples.push({ mm: { x: wp.x, y: wp.y }, px: { x: px.x - origin.x, y: px.y - origin.y } });
 		}
 	}
 
-	// Always return to the start point, even if some detections failed.
+	// Always return to the start point, even if some detections failed or we aborted.
 	await jog(io, -current.x, -current.y, params);
+	if (abort?.()) return { ok: false, error: "aborted" };
 	progress?.status?.("Solving calibration…");
 	return calibrate(samples);
 }
@@ -142,8 +149,9 @@ export async function centreTool(
 	progress?: ProgressSink,
 ): Promise<CentreResult> {
 	for (let i = 0; i < params.maxIterations; i++) {
-		const px = await detectStable(detectOnce, { tolPx: params.tolerancePx }, progress);
-		if (!px) return { ok: false, iterations: i, error: "lost the nozzle during centring" };
+		if (params.shouldAbort?.()) return { ok: false, iterations: i, error: "aborted" };
+		const px = await detectStable(detectOnce, { tolPx: params.tolerancePx, shouldAbort: params.shouldAbort }, progress);
+		if (!px) return { ok: false, iterations: i, error: params.shouldAbort?.() ? "aborted" : "lost the nozzle during centring" };
 
 		const corr = computeCorrection(px, frameCentre, k, {
 			gain: params.gain,

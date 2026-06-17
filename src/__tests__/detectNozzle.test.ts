@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ConvergenceTracker, pickNearestToCentre } from "../cv/detectNozzle";
+import { ConvergenceTracker, pickLargest, pickNearestToCentre } from "../cv/detectNozzle";
 
 describe("pickNearestToCentre", () => {
 	it("returns the circle closest to the centre point", () => {
@@ -15,6 +15,21 @@ describe("pickNearestToCentre", () => {
 
 	it("returns null for no candidates", () => {
 		expect(pickNearestToCentre([], { x: 0, y: 0 })).toBeNull();
+	});
+});
+
+describe("pickLargest", () => {
+	it("returns the circle with the greatest radius", () => {
+		const circles = [
+			{ x: 10, y: 10, r: 5 },
+			{ x: 320, y: 240, r: 18 },
+			{ x: 600, y: 400, r: 12 },
+		];
+		expect(pickLargest(circles)).toEqual({ x: 320, y: 240, r: 18 });
+	});
+
+	it("returns null for no candidates", () => {
+		expect(pickLargest([])).toBeNull();
 	});
 });
 

@@ -38,6 +38,20 @@
       <span v-if="!tools.length" class="text-caption text-medium-emphasis">{{ $t("plugins.duetToolAlign.tools.empty") }}</span>
     </div>
 
+    <!-- Live detection (no motion — needs only the camera) + Z focus -->
+    <div class="aa-focus d-flex flex-wrap align-center ga-1 px-1 pt-1 flex-shrink-0">
+      <v-btn size="small" :variant="detecting ? 'flat' : 'tonal'" :color="detecting ? 'primary' : undefined"
+             prepend-icon="mdi-eye" :disabled="busy || !cfg.bridgeUrl" @click="toggleDetect">
+        {{ detecting ? $t("plugins.duetToolAlign.actions.stopDetect") : $t("plugins.duetToolAlign.actions.detect") }}
+      </v-btn>
+      <v-spacer />
+      <span class="text-caption text-medium-emphasis mr-1">{{ $t("plugins.duetToolAlign.focus.label") }}</span>
+      <v-btn size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(-1)">Z−</v-btn>
+      <v-btn size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(1)">Z+</v-btn>
+      <v-text-field v-model.number="cfg.zStep" type="number" density="compact" variant="outlined" hide-details
+                    class="aa-narrow" suffix="mm" />
+    </div>
+
     <!-- Camera position + primary actions -->
     <div class="aa-actions d-flex flex-wrap align-center ga-1 px-1 pt-1 flex-shrink-0">
       <v-btn size="small" variant="tonal" prepend-icon="mdi-camera-marker" :disabled="disabledNow || !hasCameraPos" @click="gotoCamera">
@@ -47,17 +61,17 @@
         {{ $t("plugins.duetToolAlign.camera.set") }}
       </v-btn>
       <v-spacer />
-      <v-btn size="small" variant="tonal" prepend-icon="mdi-grid" :disabled="disabledNow || !cfg.bridgeUrl" @click="doCalibrate">
+      <v-btn size="small" variant="tonal" prepend-icon="mdi-grid" :disabled="disabledNow || detecting || !cfg.bridgeUrl" @click="doCalibrate">
         {{ $t("plugins.duetToolAlign.actions.calibrate") }}
       </v-btn>
       <v-btn size="small" variant="tonal" prepend-icon="mdi-image-filter-center-focus"
-             :disabled="disabledNow || current < 0 || !transform" @click="centreCurrent">
+             :disabled="disabledNow || detecting || current < 0 || !transform" @click="centreCurrent">
         {{ $t("plugins.duetToolAlign.actions.centre") }}
       </v-btn>
-      <v-btn size="small" color="primary" variant="flat" prepend-icon="mdi-play" :disabled="disabledNow || !cfg.bridgeUrl" @click="runFull">
+      <v-btn size="small" color="primary" variant="flat" prepend-icon="mdi-play" :disabled="disabledNow || detecting || !cfg.bridgeUrl" @click="runFull">
         {{ $t("plugins.duetToolAlign.actions.runFull") }}
       </v-btn>
-      <v-btn v-if="busy" size="small" color="error" variant="text" prepend-icon="mdi-stop" @click="stop">
+      <v-btn v-if="busy || detecting" size="small" color="error" variant="text" prepend-icon="mdi-stop" @click="stop">
         {{ $t("plugins.duetToolAlign.actions.stop") }}
       </v-btn>
     </div>
@@ -132,6 +146,25 @@
             <v-text-field v-model.number="cfg.maxRadiusPx" type="number" density="compact" variant="outlined" hide-details
                           class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.maxRadiusPx')" />
           </div>
+
+          <div class="text-caption text-medium-emphasis mt-3 mb-1">{{ $t("plugins.duetToolAlign.settings.detectionHeading") }}</div>
+          <div class="d-flex ga-2 flex-wrap align-center">
+            <v-text-field v-model.number="cfg.houghParam2" type="number" density="compact" variant="outlined" hide-details
+                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.houghParam2')"
+                          :hint="$t('plugins.duetToolAlign.settings.houghParam2Hint')" persistent-hint />
+            <v-text-field v-model.number="cfg.houghParam1" type="number" density="compact" variant="outlined" hide-details
+                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.houghParam1')" />
+            <v-text-field v-model.number="cfg.houghDp" type="number" step="0.1" density="compact" variant="outlined" hide-details
+                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.houghDp')" />
+            <v-text-field v-model.number="cfg.houghMinDist" type="number" density="compact" variant="outlined" hide-details
+                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.houghMinDist')" />
+            <v-text-field v-model.number="cfg.blurKsize" type="number" density="compact" variant="outlined" hide-details
+                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.blurKsize')" />
+            <v-text-field v-model.number="cfg.detectWidth" type="number" density="compact" variant="outlined" hide-details
+                          class="aa-narrow" :label="$t('plugins.duetToolAlign.settings.detectWidth')" />
+            <v-switch v-model="cfg.pickLargest" density="compact" hide-details color="primary"
+                      :label="$t('plugins.duetToolAlign.settings.pickLargest')" />
+          </div>
         </v-expansion-panel-text>
       </v-expansion-panel>
     </v-expansion-panels>
@@ -149,7 +182,7 @@ import { LogLevel, useUiStore } from "@/stores/ui";
 import { type AxisCapture, computeToolOffset, formatG10, type ToolOffset } from "../util/toolAlign";
 import { resolveOmPath } from "../util/omPath";
 import { type AutoAlignConfig, resolveOpencvUrl, useConfig } from "../model/document";
-import { pickNearestToCentre } from "../cv/detectNozzle";
+import { type DetectParams, pickLargest, pickNearestToCentre } from "../cv/detectNozzle";
 import { WorkerDetector } from "../cv/detectorWorker";
 import { grabFrame } from "../cv/frameGrabber";
 import type { Mat2, Vec2 } from "../cv/geometry";
@@ -202,6 +235,7 @@ const streamSrc = computed(() => {
 function onImgError(): void { /* retried by the refresh tick */ }
 
 const lastDetection = ref<Vec2 | null>(null);
+const lastRadius = ref(0);
 const frameW = ref(0);
 const frameH = ref(0);
 const detectionStyle = computed(() => {
@@ -261,6 +295,21 @@ const machineIO: MachineIO = {
   machinePos,
 };
 
+// Build the detector params from the live config, so tuning in Settings takes effect immediately
+// (including during the live Detect loop).
+function detectParams(): DetectParams {
+  return {
+    minRadius: cfg.minRadiusPx,
+    maxRadius: cfg.maxRadiusPx,
+    dp: cfg.houghDp,
+    param1: cfg.houghParam1,
+    param2: cfg.houghParam2,
+    minDist: cfg.houghMinDist,
+    blur: cfg.blurKsize,
+    detectWidth: cfg.detectWidth,
+  };
+}
+
 async function detectOnce(): Promise<Vec2 | null> {
   if (!cvReady.value || !cfg.bridgeUrl) return null;
   try {
@@ -269,13 +318,32 @@ async function detectOnce(): Promise<Vec2 | null> {
     frameH.value = img.height;
     const centre = { x: img.width / 2, y: img.height / 2 };
     // detect() transfers the pixel buffer to the worker, so read dimensions/centre first.
-    const circles = await detector.detect(img, { minRadius: cfg.minRadiusPx, maxRadius: cfg.maxRadiusPx });
-    const c = pickNearestToCentre(circles, centre);
+    const circles = await detector.detect(img, detectParams());
+    const c = cfg.pickLargest ? pickLargest(circles) : pickNearestToCentre(circles, centre);
     lastDetection.value = c ? { x: c.x, y: c.y } : null;
+    lastRadius.value = c ? c.r : 0;
     return lastDetection.value;
   } catch (e) {
     setStatus((e as Error).message, "error");
     return null;
+  }
+}
+
+// --- Live detection preview (no motion) — verify/tune detection before aligning ---
+const detecting = ref(false);
+async function toggleDetect(): Promise<void> {
+  if (detecting.value) { detecting.value = false; return; }
+  if (!(await ensureCv())) return;
+  detecting.value = true;
+  aborted = false;
+  while (detecting.value && !aborted) {
+    const p = await detectOnce();
+    if (p) {
+      setStatus(i18n.global.t("plugins.duetToolAlign.detect.found", { x: p.x.toFixed(0), y: p.y.toFixed(0), r: lastRadius.value.toFixed(0) }), "ok");
+    } else if (cvReady.value) {
+      setStatus(i18n.global.t("plugins.duetToolAlign.detect.none"));
+    }
+    await new Promise((r) => setTimeout(r, 150));
   }
 }
 
@@ -288,7 +356,15 @@ function motionParams() {
     maxStepMm: cfg.maxStepMm,
     maxIterations: cfg.maxIterations,
     calibStepMm: cfg.calibStepMm,
+    shouldAbort: () => aborted,
   };
+}
+
+// Manual Z jog to bring the nozzle into focus (sharpen the image) before/while detecting.
+function focusZ(dir: number): void {
+  if (disabledNow.value) return;
+  const d = dir * (cfg.zStep || 0.05);
+  void send(`M120\nG91\nG1 Z${d.toFixed(3)} F${cfg.jogFeed}\nG90\nM121`);
 }
 function frameCentre(): Vec2 {
   return { x: (frameW.value || 640) / 2, y: (frameH.value || 480) / 2 };
@@ -432,7 +508,7 @@ async function runFull(): Promise<void> {
   }
 }
 
-function stop(): void { aborted = true; }
+function stop(): void { aborted = true; detecting.value = false; }
 
 // --- Offsets -------------------------------------------------------------------
 function setReference(): void {

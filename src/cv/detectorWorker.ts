@@ -13,7 +13,7 @@
  * inside the worker for speed, with circle coordinates scaled back to original-image pixels so the
  * overlay and calibration stay in one consistent coordinate space.
  */
-import type { Circle } from "./detectNozzle";
+import type { Circle, DetectParams } from "./detectNozzle";
 
 // NB: plain JS, no backticks. Mirrors detectCircles() — keep the two in sync if the pipeline changes.
 const WORKER_SOURCE = `
@@ -35,35 +35,33 @@ function awaitRuntime(g, done, fail) {
   })();
 }
 
-function detect(cv, data, width, height, minR, maxR) {
+function detect(cv, data, width, height, p) {
   const src = cv.matFromImageData({ data: data, width: width, height: height });
   const gray = new cv.Mat();
   const work = new cv.Mat();
   const found = [];
   try {
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-    const maxW = 800;
-    const scale = width > maxW ? maxW / width : 1;
+    const target = p.detectWidth > 0 ? p.detectWidth : width;
+    const scale = width > target ? target / width : 1;
     if (scale < 1) {
       cv.resize(gray, work, new cv.Size(Math.round(width * scale), Math.round(height * scale)), 0, 0, cv.INTER_AREA);
     } else {
       gray.copyTo(work);
     }
-    cv.medianBlur(work, work, 5);
+    const ks = p.blur >= 3 && p.blur % 2 === 1 ? p.blur : 0;
+    if (ks) cv.medianBlur(work, work, ks);
     const w = work.cols, h = work.rows;
-    const minDist = Math.max(20, Math.floor(Math.min(w, h) / 8));
-    const passes = [[1, 100, 60], [1, 100, 40], [1.5, 80, 30]];
-    for (let k = 0; k < passes.length; k++) {
-      const p = passes[k];
-      const c = new cv.Mat();
-      try {
-        cv.HoughCircles(work, c, cv.HOUGH_GRADIENT, p[0], minDist, p[1], p[2], Math.round(minR * scale), Math.round(maxR * scale));
-        for (let i = 0; i < c.cols; i++) {
-          const b = i * 3;
-          found.push({ x: c.data32F[b] / scale, y: c.data32F[b + 1] / scale, r: c.data32F[b + 2] / scale });
-        }
-      } finally { c.delete(); }
-    }
+    const minDist = p.minDist > 0 ? p.minDist * scale : Math.max(20, Math.floor(Math.min(w, h) / 8));
+    const c = new cv.Mat();
+    try {
+      cv.HoughCircles(work, c, cv.HOUGH_GRADIENT, p.dp, minDist, p.param1, p.param2,
+        Math.round(p.minRadius * scale), Math.round(p.maxRadius * scale));
+      for (let i = 0; i < c.cols; i++) {
+        const b = i * 3;
+        found.push({ x: c.data32F[b] / scale, y: c.data32F[b + 1] / scale, r: c.data32F[b + 2] / scale });
+      }
+    } finally { c.delete(); }
   } finally { src.delete(); gray.delete(); work.delete(); }
   return found;
 }
@@ -84,7 +82,7 @@ self.onmessage = function (e) {
     if (!ready) { self.postMessage({ type: 'result', id: msg.id, circles: [] }); return; }
     try {
       const data = new Uint8ClampedArray(msg.buffer);
-      const circles = detect(cvRef, data, msg.width, msg.height, msg.minR, msg.maxR);
+      const circles = detect(cvRef, data, msg.width, msg.height, msg.params);
       self.postMessage({ type: 'result', id: msg.id, circles: circles });
     } catch (err) {
       self.postMessage({ type: 'result', id: msg.id, circles: [], error: String(err && err.message || err) });
@@ -141,15 +139,13 @@ export class WorkerDetector {
 	}
 
 	/** Detect candidate circles in a frame. Transfers the pixel buffer (the ImageData is consumed). */
-	detect(img: ImageData, opts: { minRadius?: number; maxRadius?: number } = {}): Promise<Array<Circle>> {
+	detect(img: ImageData, params: DetectParams): Promise<Array<Circle>> {
 		if (!this.worker || !this.ready) return Promise.resolve([]);
 		const id = this.nextId++;
-		const minR = opts.minRadius ?? 5;
-		const maxR = opts.maxRadius ?? Math.floor(Math.min(img.width, img.height) / 2);
 		const buffer = img.data.buffer;
 		return new Promise((resolve) => {
 			this.pending.set(id, resolve);
-			this.worker!.postMessage({ type: "detect", id, width: img.width, height: img.height, buffer, minR, maxR }, [buffer]);
+			this.worker!.postMessage({ type: "detect", id, width: img.width, height: img.height, buffer, params }, [buffer]);
 		});
 	}
 
