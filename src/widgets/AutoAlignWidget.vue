@@ -1,9 +1,12 @@
 <template>
-  <div class="aa-root fill-height d-flex flex-column" :class="{ 'aa-frozen': disabledNow }">
+  <div class="aa-root fill-height d-flex flex-column">
     <!-- Camera with crosshair + detected-circle overlay -->
     <div class="aa-cam flex-grow-1">
-      <div v-if="!cfg.bridgeUrl" class="aa-noimg text-caption text-medium-emphasis pa-2">
-        {{ $t("plugins.duetToolAlign.noUrl") }}
+      <div v-if="!cfg.bridgeUrl" class="aa-setup pa-3">
+        <div class="text-caption text-medium-emphasis mb-2">{{ $t("plugins.duetToolAlign.noUrl") }}</div>
+        <v-text-field v-model="cfg.bridgeUrl" density="compact" variant="outlined" hide-details autofocus
+                      :label="$t('plugins.duetToolAlign.settings.bridgeUrl')"
+                      :placeholder="$t('plugins.duetToolAlign.settings.bridgeUrlHint')" />
       </div>
       <img v-else :src="streamSrc" class="aa-img" @error="onImgError" />
 
@@ -480,11 +483,12 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearInterval(timer); });
 
 <style scoped>
 .aa-root { min-height: 0; overflow: hidden; }
-.aa-frozen { opacity: 0.6; pointer-events: none; }
 
 .aa-cam { position: relative; min-height: 120px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #000; }
 .aa-img { max-width: 100%; max-height: 100%; display: block; object-fit: contain; }
-.aa-noimg { text-align: center; }
+/* The setup prompt (shown until a bridge URL is set) sits on a normal surface, not the black camera
+   backdrop, so the input is readable; it's always interactive regardless of connection state. */
+.aa-setup { width: 100%; max-width: 460px; background: rgb(var(--v-theme-surface)); border-radius: 6px; }
 
 .aa-overlay { position: absolute; inset: 0; pointer-events: none; }
 .aa-cross-h { position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid #39ff14; }
