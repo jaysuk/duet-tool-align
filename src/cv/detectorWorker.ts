@@ -19,6 +19,7 @@ import type { Circle, DetectParams } from "./detectNozzle";
 const WORKER_SOURCE = `
 let cvRef = null;
 let ready = false;
+let loggedOnce = false;
 
 function awaitRuntime(g, done, fail) {
   const deadline = Date.now() + 30000;
@@ -126,12 +127,16 @@ self.onmessage = function (e) {
     return;
   }
   if (msg.type === 'detect') {
-    if (!ready) { self.postMessage({ type: 'result', id: msg.id, circles: [] }); return; }
+    if (!ready) { self.postMessage({ type: 'result', id: msg.id, circles: [], error: 'cv-not-ready' }); return; }
     try {
       const data = new Uint8ClampedArray(msg.buffer);
       const circles = detect(cvRef, data, msg.width, msg.height, msg.params);
+      if (!loggedOnce) { loggedOnce = true; console.log('[ToolAlign worker] first detect ok', { method: msg.params && msg.params.method, w: msg.width, h: msg.height, found: circles.length, hasMatFromImageData: typeof cvRef.matFromImageData }); }
       self.postMessage({ type: 'result', id: msg.id, circles: circles });
     } catch (err) {
+      // Surface the real exception: previously this was swallowed, so a broken pipeline just looked
+      // like "no nozzle found" forever. Log here (visible in the worker's console) and report it back.
+      console.error('[ToolAlign worker] detect failed:', (err && err.stack) || String(err));
       self.postMessage({ type: 'result', id: msg.id, circles: [], error: String(err && err.message || err) });
     }
     return;
@@ -144,6 +149,8 @@ export class WorkerDetector {
 	private nextId = 1;
 	private pending = new Map<number, (circles: Array<Circle>) => void>();
 	private ready = false;
+	/** Last per-frame detect error reported by the worker (null when the last detect was clean). */
+	lastError: string | null = null;
 
 	get isReady(): boolean {
 		return this.ready;
@@ -177,8 +184,10 @@ export class WorkerDetector {
 
 	private attachResultHandler(): void {
 		this.worker?.addEventListener("message", (e: MessageEvent) => {
-			const d = e.data as { type?: string; id?: number; circles?: Array<Circle> };
+			const d = e.data as { type?: string; id?: number; circles?: Array<Circle>; error?: string };
 			if (d.type === "result" && typeof d.id === "number") {
+				this.lastError = d.error ?? null;
+				if (d.error) console.warn("[ToolAlign] worker detect error:", d.error);
 				const cb = this.pending.get(d.id);
 				if (cb) { this.pending.delete(d.id); cb(d.circles ?? []); }
 			}

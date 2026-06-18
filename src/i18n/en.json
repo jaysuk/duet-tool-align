@@ -33,7 +33,8 @@
 	},
 	"detect": {
 		"found": "Detected at {x},{y}  r={r}px",
-		"none": "No nozzle found — adjust focus, radius range, or sensitivity"
+		"none": "No nozzle found — adjust focus, radius range, or sensitivity",
+		"error": "Detection error: {msg}"
 	},
 	"calib": {
 		"done": "Calibrated: {residual} mm residual ({used} samples).",

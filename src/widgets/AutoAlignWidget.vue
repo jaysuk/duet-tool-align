@@ -428,6 +428,7 @@ async function detectOnce(): Promise<Vec2 | null> {
     const centre = { x: img.width / 2, y: img.height / 2 };
     // detect() transfers the pixel buffer to the worker, so read dimensions/centre first.
     const circles = await detector.detect(img, detectParams());
+    if (detector.lastError) setStatus(i18n.global.t("plugins.duetToolAlign.detect.error", { msg: detector.lastError }), "error");
     const c = cfg.pickLargest ? pickLargest(circles) : pickNearestToCentre(circles, centre);
     if (!c) { smoothBuf.length = 0; lastDetection.value = null; lastRadius.value = 0; return null; }
     const raw = { x: c.x, y: c.y };
