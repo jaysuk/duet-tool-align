@@ -4,3 +4,6 @@ pkg/
 coverage/
 *.zip
 *.log
+
+# Bundled OpenCV.js runtime, fetched at build time by scripts/fetch-opencv.mjs (large; not committed).
+dwc/

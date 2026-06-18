@@ -14,6 +14,13 @@ if exist "%PLUGIN_REPO%\dist" rmdir /s /q "%PLUGIN_REPO%\dist"
 if exist "%PLUGIN_REPO%\pkg" rmdir /s /q "%PLUGIN_REPO%\pkg"
 del /q "%PLUGIN_REPO%\%PLUGIN_ID%-*.zip" 2>nul
 
+echo Fetching bundled OpenCV.js asset ...
+call node "%PLUGIN_REPO%\scripts\fetch-opencv.mjs"
+if errorlevel 1 (
+    echo OpenCV fetch failed.
+    exit /b 1
+)
+
 echo Building plugin against %DWC_DIR% ...
 cd /d "%DWC_DIR%"
 :: build-plugin-pkg packages a content-hashed, fully-installable ZIP (dwcFiles manifest populated).

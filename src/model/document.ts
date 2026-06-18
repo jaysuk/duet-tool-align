@@ -147,11 +147,21 @@ export function defaultConfig(): AutoAlignConfig {
 	};
 }
 
-/** Resolve the OpenCV.js URL: explicit override, else derived from the bridge URL. */
+/**
+ * Resolve the OpenCV.js URL. Priority: explicit override → the OpenCV runtime bundled with this
+ * plugin (served from DWC's web root, resolved via DWC's `pluginAssetUrl`, DWC 3.7 b9b93bb+) → the
+ * camera bridge's /opencv copy (fallback for older DWC). Reads the global `window.DWC` rather than
+ * importing `@/plugins`, so it stays resolvable in unit tests too.
+ */
 export function resolveOpencvUrl(cfg: AutoAlignConfig): string {
 	if (cfg.opencvUrl) return cfg.opencvUrl;
-	if (!cfg.bridgeUrl) return "";
-	return cfg.bridgeUrl.replace(/\/+$/, "") + "/opencv/opencv.js";
+	const dwc = (globalThis as { DWC?: { pluginAssetUrl?: (p: string) => string } }).DWC;
+	if (dwc?.pluginAssetUrl) {
+		const rel = dwc.pluginAssetUrl("DuetToolAlign/opencv.js");
+		try { return new URL(rel, location.href).href; } catch { return rel; }
+	}
+	if (cfg.bridgeUrl) return cfg.bridgeUrl.replace(/\/+$/, "") + "/opencv/opencv.js";
+	return "";
 }
 
 /**

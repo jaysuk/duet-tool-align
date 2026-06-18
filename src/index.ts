@@ -11,23 +11,19 @@
  */
 import { registerEmbeddableComponent, registerPluginMessages, registerRoute, unregisterEmbeddableComponent, unregisterRoute } from "@/plugins";
 import Events from "@/utils/events";
-import { installErrorCapture } from "dwc-plugin-runtime";
-
-import { clearAnnouncedUpdate } from "dwc-plugin-runtime";
+import { clearAnnouncedUpdate, installErrorCapture, registerWidgetConfig, unregisterWidgetConfig } from "dwc-plugin-runtime";
 
 import AutoAlignPage from "./AutoAlignPage.vue";
 import AutoAlignWidget from "./widgets/AutoAlignWidget.vue";
 import { EMBEDDABLE_ID, PLUGIN_ID, PLUGIN_MANIFEST_ID, ROUTE_PATH } from "./model/constants";
+import { autoAlignSchema } from "./model/schema";
 import { runUpdateCheck } from "./model/updateCheck";
 import en from "./i18n/en.json";
 
 registerPluginMessages(PLUGIN_ID, { en });
 
-// registerRoute is NOT idempotent — it pushes a nav item + route every call. If this module is
-// evaluated more than once in a session (e.g. installing a new build over a running one without a
-// full DWC reload), that yields a duplicate "Tool Align" entry. Clearing any prior registration for
-// our path first makes load self-healing. unregisterRoute is a no-op when nothing is registered.
-unregisterRoute(ROUTE_PATH);
+// registerRoute is idempotent by path in DWC 3.7 (b9b93bb+) — a repeated registration is a no-op,
+// so a plugin reload no longer stacks a duplicate "Tool Align" drawer entry.
 registerRoute(AutoAlignPage, {
 	Plugins: {
 		DuetToolAlign: {
@@ -49,6 +45,10 @@ registerEmbeddableComponent({
 	machineMode: "any",
 });
 
+// Publish the widget's config schema so a host (Flexible Layouts) can render a per-instance editor
+// and pass config to the embedded widget. See dwc-plugin-runtime's widget-config framework.
+registerWidgetConfig({ schema: autoAlignSchema });
+
 // Buffer uncaught errors/rejections for diagnostics; cleaned up on unload.
 const uninstallErrorCapture = installErrorCapture();
 
@@ -61,6 +61,7 @@ function onPluginUnloaded(id: string): void {
 	if (id === PLUGIN_MANIFEST_ID) {
 		unregisterRoute(ROUTE_PATH);
 		unregisterEmbeddableComponent(EMBEDDABLE_ID);
+		unregisterWidgetConfig(EMBEDDABLE_ID);
 		clearAnnouncedUpdate(PLUGIN_MANIFEST_ID); // drop us from the unified popup
 		uninstallErrorCapture();
 		Events.off("dwcPluginUnloaded", onPluginUnloaded);

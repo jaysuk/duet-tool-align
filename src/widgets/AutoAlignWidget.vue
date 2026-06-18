@@ -279,13 +279,15 @@ import type { Mat2, Vec2 } from "../cv/geometry";
 import { centreTool, type MachineIO, runCalibration } from "../model/orchestrator";
 import { applying, dismissCurrentUpdate, dismissedVersion, applyUpdateNow, pendingReload, updateChecksEnabled, setUpdateChecksEnabled, updateState } from "../model/updateCheck";
 
-// Optional config injection (FL merge / standalone page may pass one); embeddable use passes none, so
-// fall back to the persisted settings-store config.
-const props = defineProps<{ widget?: AutoAlignConfig; disabled?: boolean }>();
+// Per-instance config injection (the widget-config framework contract): a host (Flexible Layouts)
+// passes a reactive `config` object it persists; the standalone page passes nothing, so we fall back
+// to the shared settings-store config. The widget mutates `cfg` directly; the host deep-watches the
+// object it passed to persist changes. (`widget` kept as a back-compat alias.)
+const props = defineProps<{ config?: AutoAlignConfig; widget?: AutoAlignConfig; disabled?: boolean; host?: { isEditing?: boolean } }>();
 
 const machineStore = useMachineStore();
 const uiStore = useUiStore();
-const cfg = props.widget ?? useConfig();
+const cfg = props.config ?? props.widget ?? useConfig();
 
 const disabledNow = computed(() => props.disabled || uiStore.uiFrozen || busy.value);
 

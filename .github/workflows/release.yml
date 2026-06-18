@@ -86,6 +86,10 @@ jobs:
           DWC_DIR: ${{ github.workspace }}/DuetWebControl
         run: npm run typecheck
 
+      - name: Fetch bundled OpenCV.js asset
+        working-directory: plugin
+        run: node scripts/fetch-opencv.mjs
+
       - name: Build installable ZIP
         working-directory: plugin
         env:
