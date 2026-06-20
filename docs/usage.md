@@ -84,36 +84,40 @@ Use this when offsets are defined from a carriage reference rather than from a p
 
 ## 5. Running an alignment
 
+You drive the tool changes and jogging yourself — the plugin never changes tools or travels on its
+own. **Calibrate** must be run before you can align (the **Align loaded tool** button stays disabled
+until a calibration exists). Calibration is camera-fixed, so you only need to do it **once** per
+session (the camera doesn't move between tools); each tool is then aligned individually.
+
 ### Workflow A — tool-to-tool (Reference = Reference tool)
 
 1. **Reference = Reference tool**, set the **Reference tool** (e.g. 0).
-2. Select the reference tool, jog it roughly over the lens (use **Jog X/Y** and **-Z/+Z**), confirm
-   **Detect** locks the bore, then stop Detect.
-3. **Calibrate** — the nozzle jogs a small star pattern and returns; the status reports the residual
-   (lower is better, well under a pixel typically). This learns the pixel→mm mapping; it does **not**
-   centre the nozzle.
-4. **Run full alignment** — the plugin selects the reference tool, centres it on the crosshair and
-   records it as the origin, then for each other tool: selects it, travels to the camera, centres, and
-   records. Watch progress in the status line; **Stop** aborts at any point.
-5. Review the **offsets table** (each tool’s captured XY and computed offset). **Apply all** sends the
-   `G10` commands; **Save (M500)** persists them. The reference tool shows no offset (it’s the origin).
-
-You can also do it tool-by-tool: select a tool, **Centre & capture tool**, repeat, then Apply.
+2. Load the **reference tool**, jog it over the lens (use **Jog X/Y** and **-Z/+Z**), confirm **Detect**
+   locks the bore, then stop Detect.
+3. **Calibrate** — the nozzle jogs a small star and returns; the status reports the residual (lower is
+   better). This learns the pixel→mm mapping; it does **not** centre the nozzle.
+4. **Align loaded tool** — centres the *currently-loaded* tool on the crosshair and records it. For the
+   reference tool this captures the origin. **Stop** aborts.
+5. **Change to the next tool yourself**, jog its nozzle into frame, then **Align loaded tool** again.
+   Repeat for every tool. (No need to re-calibrate.)
+6. Review the **offsets table**, then **Apply all** (`G10`) and **Save (M500)**. The reference tool
+   shows no offset (it's the origin).
 
 ### Workflow B — carriage-to-tool (Reference = Carriage datum)
 
 1. **Reference = Carriage datum.**
-2. **Capture the datum:** **Unload (T-1)** to clear the active tool, jog so the carriage’s datum
-   feature (switch trigger point / reference mark) sits on the crosshair, then click **Capture datum**.
-   The datum machine XY is stored (shown next to the button). *(Detection is for round nozzle bores; a
-   switch/feature is positioned by eye on the crosshair.)*
-3. Bring the first tool over the lens and **Calibrate** (as in A — needs a nozzle in view).
-4. **Run full alignment** — every tool (T0 included) is selected, centred, and recorded; each offset is
-   `tool position − datum`.
-5. **Apply all** / **Save (M500)**. Here **every** tool gets a `G10`, including T0.
+2. **Capture the datum:** **Unload (T-1)**, jog so the carriage’s datum feature (switch trigger point /
+   reference mark) sits on the crosshair, then **Capture datum**. *(Detection is for round nozzle bores;
+   position a switch/feature by eye on the crosshair.)*
+3. Load a tool, jog its nozzle over the lens, and **Calibrate**.
+4. **Align loaded tool** — centres and records the loaded tool; its offset is `tool position − datum`.
+5. **Change tools yourself**, jog into frame, **Align loaded tool** again — repeat for every tool
+   (including T0; each gets a `G10` from the datum).
+6. **Apply all** / **Save (M500)**.
 
-> **Sign convention:** if your machine’s offsets come out negated, flip the **Invert offsets** switch
-> before applying. Verify with a two-colour test print or a known-good config.
+> **Tips.** Use **Centre & capture tool** for the same centre+record without running your start/finish
+> macros. If offsets come out negated, flip **Invert offsets** before applying, and verify with a
+> two-colour test print.
 
 ---
 

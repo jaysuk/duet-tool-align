@@ -112,7 +112,8 @@
              :disabled="disabledNow || detecting || current < 0 || !transform" @click="centreCurrent">
         {{ $t("plugins.duetToolAlign.actions.centre") }}
       </v-btn>
-      <v-btn size="small" color="primary" variant="flat" prepend-icon="mdi-play" :disabled="disabledNow || detecting || !cfg.bridgeUrl" @click="runFull">
+      <v-btn size="small" color="primary" variant="flat" prepend-icon="mdi-play"
+             :disabled="disabledNow || detecting || current < 0 || !transform" @click="runFull">
         {{ $t("plugins.duetToolAlign.actions.runFull") }}
       </v-btn>
       <v-btn v-if="busy || detecting" size="small" color="error" variant="text" prepend-icon="mdi-stop" @click="stop">
@@ -611,49 +612,26 @@ async function centreCurrent(): Promise<void> {
   }
 }
 
-async function selectAndTravel(n: number): Promise<void> {
-  await machineIO.sendCode(`T${n}\nM400`);
-  const code = gotoCameraCode();
-  if (code) await machineIO.sendCode(code);
-}
-
-async function calibrateIfNeeded(): Promise<boolean> {
-  if (transform.value) return true;
-  const cal = await runCalibration(machineIO, detectOnce, motionParams(), progress);
-  if (!cal.ok || !cal.mmPerPx) { setStatus(i18n.global.t("plugins.duetToolAlign.calib.fail", { msg: cal.error ?? "" }), "error"); return false; }
-  transform.value = cal.mmPerPx;
-  setStatus(i18n.global.t("plugins.duetToolAlign.calib.done", { residual: (cal.residualMm ?? 0).toFixed(3), used: cal.used ?? 0 }), "ok");
-  return true;
-}
-
-// Select a tool, travel to the camera, calibrate if we haven't yet, then centre and capture it.
-async function centreAndCapture(toolNum: number): Promise<void> {
-  await selectAndTravel(toolNum);
-  if (aborted) return;
-  if (!(await calibrateIfNeeded())) { aborted = true; return; }
-  if (aborted) return;
-  const res = await centreTool(machineIO, detectOnce, transform.value!, frameCentre(), motionParams(), progress);
-  if (res.ok && res.position) captureXY(toolNum, res.position);
-}
-
+// Align the CURRENTLY-LOADED tool only: optional start macro → centre on the crosshair → capture →
+// optional finish macro. The user drives tool changes and jogs the nozzle into frame themselves, then
+// runs this per tool. Requires a calibration (transform) to exist first; does not change tools or
+// travel on its own.
 async function runFull(): Promise<void> {
-  if (busy.value || !(await ensureCv())) return;
+  if (busy.value) return;
+  if (current.value < 0) { notify(i18n.global.t("plugins.duetToolAlign.selectTool")); return; }
+  if (!transform.value) { setStatus(i18n.global.t("plugins.duetToolAlign.calib.needed"), "error"); return; }
   if (cfg.referenceMode === "point" && !refPoint.value) {
     setStatus(i18n.global.t("plugins.duetToolAlign.run.needRefPoint"), "error");
     return;
   }
+  if (!(await ensureCv())) return;
   busy.value = true; aborted = false;
   try {
     if (cfg.startCommand) await machineIO.sendCode(cfg.startCommand);
-    let order = tools.value.map((t) => t.number);
-    // In reference-tool mode do the reference tool first, so calibration happens on it and its
-    // capture is the origin. In carriage-datum mode the order doesn't matter (origin is refPoint).
-    if (cfg.referenceMode === "tool") {
-      order = [cfg.referenceTool, ...order.filter((n) => n !== cfg.referenceTool)];
-    }
-    for (const n of order) {
-      if (aborted) break;
-      await centreAndCapture(n);
+    if (!aborted) {
+      const res = await centreTool(machineIO, detectOnce, transform.value, frameCentre(), motionParams(), progress);
+      if (res.ok && res.position) captureXY(current.value, res.position);
+      else setStatus(i18n.global.t("plugins.duetToolAlign.centre.fail", { msg: res.error ?? "" }), "error");
     }
     if (!aborted && cfg.finishCommand) await machineIO.sendCode(cfg.finishCommand);
     setStatus(aborted ? i18n.global.t("plugins.duetToolAlign.run.aborted")

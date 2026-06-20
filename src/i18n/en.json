@@ -23,7 +23,7 @@
 	"actions": {
 		"calibrate": "Calibrate",
 		"centre": "Centre & capture tool",
-		"runFull": "Run full alignment",
+		"runFull": "Align loaded tool",
 		"detect": "Detect",
 		"stopDetect": "Stop detect",
 		"stop": "Stop"
