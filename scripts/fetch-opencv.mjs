@@ -9,18 +9,25 @@
  * OpenCV 4.9.0's docs build is a single self-contained file (~10 MB, WASM inlined), so there's no
  * separate .wasm to ship.
  */
-import { mkdirSync, writeFileSync, existsSync, statSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, statSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const version = process.argv[2] || "4.9.0";
 const url = `https://docs.opencv.org/${version}/opencv.js`;
 const outDir = join(dirname(fileURLToPath(import.meta.url)), "..", "dwc", "DuetToolAlign");
-const outFile = join(outDir, "opencv.js");
+// Saved with a NON-".js" extension on purpose: DWC's plugin loader auto-injects every dwcFiles ".js"
+// as a <script> at plugin load, which would parse the 10 MB runtime on every page load. As ".bin" it
+// just lands on the filesystem and the CV worker fetch+evals it on demand (when the page opens).
+const outFile = join(outDir, "opencv.bin");
+
+// Remove a stale opencv.js from an older build — if it survived it would be packaged into dwcFiles
+// and auto-injected as a <script>, the very thing the .bin rename avoids.
+try { rmSync(join(outDir, "opencv.js"), { force: true }); } catch { /* ignore */ }
 
 // Skip the download if a non-trivial copy is already present (keeps repeat builds fast).
 if (existsSync(outFile) && statSync(outFile).size > 1_000_000) {
-	console.log(`opencv.js already present (${(statSync(outFile).size / 1e6).toFixed(1)} MB) — skipping fetch`);
+	console.log(`opencv runtime already present (${(statSync(outFile).size / 1e6).toFixed(1)} MB) — skipping fetch`);
 	process.exit(0);
 }
 
@@ -37,4 +44,4 @@ if (buf.length < 1_000_000) {
 }
 mkdirSync(outDir, { recursive: true });
 writeFileSync(outFile, buf);
-console.log(`opencv.js (${(buf.length / 1e6).toFixed(1)} MB) -> dwc/DuetToolAlign/opencv.js`);
+console.log(`opencv runtime (${(buf.length / 1e6).toFixed(1)} MB) -> dwc/DuetToolAlign/opencv.bin`);

@@ -3,10 +3,12 @@
  *
  * OpenCV.js (~10 MB JS + ~7.5 MB inlined wasm) compiles and runs far too heavily to live on the
  * page's main thread — doing so freezes the whole DWC tab during load and on every detection. So all
- * of it runs in a Worker: the worker `importScripts()` the OpenCV.js URL (served by the bridge with
- * CORS), waits for the runtime, and on each request runs the same multi-pass Hough pipeline as the
- * pure `detectCircles`, returning candidate circles. The main thread only does the cheap
- * pick-nearest-centre (kept pure + tested in detectNozzle.ts).
+ * of it runs in a Worker: the worker fetches the OpenCV.js source and runs it (indirect eval) on
+ * first init, waits for the runtime, and on each request runs the Hough/contour pipeline, returning
+ * candidate circles. The main thread only does the cheap pick-nearest-centre (in detectNozzle.ts).
+ *
+ * The runtime is shipped as a NON-".js" plugin asset (opencv.bin) loaded on demand here, so DWC's
+ * plugin loader doesn't auto-inject the 10 MB file as a <script> on every page load.
  *
  * The worker is built from an inline Blob so nothing extra has to be emitted by DWC's single-IIFE
  * plugin build. Frames are sent as transferables (zero-copy). Detection is downscaled to ~800 px wide
@@ -117,13 +119,18 @@ function detect(cv, data, width, height, p) {
 self.onmessage = function (e) {
   const msg = e.data;
   if (msg.type === 'init') {
-    try {
-      importScripts(msg.url);
-      awaitRuntime(self.cv, function (m) { cvRef = m || self.cv; ready = true; self.postMessage({ type: 'ready' }); },
-        function (err) { self.postMessage({ type: 'error', error: String(err && err.message || err) }); });
-    } catch (err) {
-      self.postMessage({ type: 'error', error: String(err && err.message || err) });
-    }
+    // Fetch the OpenCV.js source and run it via indirect eval (global scope → sets self.cv) instead of
+    // importScripts. This lets the asset ship with a non-".js" name so DWC's plugin loader doesn't
+    // auto-inject the ~10 MB runtime as a <script> on every page load; it's loaded only here, when the
+    // widget first mounts. fetch is MIME-agnostic (the asset can be served as octet-stream).
+    fetch(msg.url)
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status + ' loading ' + msg.url); return r.text(); })
+      .then(function (src) {
+        (0, eval)(src);
+        awaitRuntime(self.cv, function (m) { cvRef = m || self.cv; ready = true; self.postMessage({ type: 'ready' }); },
+          function (err) { self.postMessage({ type: 'error', error: String(err && err.message || err) }); });
+      })
+      .catch(function (err) { self.postMessage({ type: 'error', error: String(err && err.message || err) }); });
     return;
   }
   if (msg.type === 'detect') {

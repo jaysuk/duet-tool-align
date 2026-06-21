@@ -157,7 +157,9 @@ export function resolveOpencvUrl(cfg: AutoAlignConfig): string {
 	if (cfg.opencvUrl) return cfg.opencvUrl;
 	const dwc = (globalThis as { DWC?: { pluginAssetUrl?: (p: string) => string } }).DWC;
 	if (dwc?.pluginAssetUrl) {
-		const rel = dwc.pluginAssetUrl("DuetToolAlign/opencv.js");
+		// Non-".js" name so DWC's loader doesn't auto-inject the 10 MB runtime as a <script> at startup;
+		// the CV worker fetch+evals it on demand instead.
+		const rel = dwc.pluginAssetUrl("DuetToolAlign/opencv.bin");
 		try { return new URL(rel, location.href).href; } catch { return rel; }
 	}
 	if (cfg.bridgeUrl) return cfg.bridgeUrl.replace(/\/+$/, "") + "/opencv/opencv.js";
