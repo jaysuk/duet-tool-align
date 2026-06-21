@@ -26,6 +26,12 @@ on:
 permissions:
   contents: write # create the Release and upload the asset
 
+env:
+  # The Conventional-Commit changelog generator is shared across the Duet plugin family and lives in
+  # the runtime repo (single source of truth). Pinned to a ref; bump this one line to adopt changelog
+  # format changes. Source: jaysuk/dwc-plugin-runtime → scripts/changelog.mjs.
+  RUNTIME_REF: d077f81a11bb5af9a35fe39f7b82d789eab19896
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -96,8 +102,13 @@ jobs:
           DWC_DIR: ${{ github.workspace }}/DuetWebControl
         run: npm run verify-build
 
-      # Release body = Conventional-Commit changelog + a footer with install instructions and the DWC
-      # version built against.
+      # Fetch the shared changelog generator from the runtime repo (single source of truth, pinned ref).
+      - name: Fetch shared release-notes generator
+        if: startsWith(github.ref, 'refs/tags/')
+        run: curl -fsSL "https://raw.githubusercontent.com/jaysuk/dwc-plugin-runtime/${RUNTIME_REF}/scripts/changelog.mjs" -o "$RUNNER_TEMP/changelog.mjs"
+
+      # Release body = shared Conventional-Commit changelog + a footer with install instructions and
+      # the DWC version built against.
       - name: Generate release notes
         id: changelog
         if: startsWith(github.ref, 'refs/tags/')
@@ -109,7 +120,7 @@ jobs:
         run: |
           {
             echo 'body<<__CHANGELOG_EOF__'
-            node scripts/changelog.mjs
+            node "$RUNNER_TEMP/changelog.mjs"
             echo
             node scripts/release-footer.mjs
             echo
