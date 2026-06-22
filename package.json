@@ -16,7 +16,7 @@
     "release": "node scripts/release.mjs"
   },
   "dependencies": {
-    "dwc-plugin-runtime": "github:jaysuk/dwc-plugin-runtime#v0.6.0"
+    "dwc-plugin-runtime": "github:jaysuk/dwc-plugin-runtime#v0.7.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.4",

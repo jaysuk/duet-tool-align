@@ -181,19 +181,11 @@
         <v-expansion-panel-text>
           <v-text-field v-model="cfg.bridgeUrl" density="compact" variant="outlined" hide-details class="mb-2"
                         :label="$t('plugins.duetToolAlign.settings.bridgeUrl')" :placeholder="$t('plugins.duetToolAlign.settings.bridgeUrlHint')">
-            <template #append-inner>
-              <v-tooltip location="top" max-width="300" text="Base URL of the duet-webcam-bridge, e.g. http://192.168.1.50:8081 — used for the camera stream and to load the CV engine.">
-                <template #activator="{ props }"><v-icon v-bind="props" size="16" color="medium-emphasis">mdi-information-outline</v-icon></template>
-              </v-tooltip>
-            </template>
+            <template #append-inner><HelpTip text="Base URL of the duet-webcam-bridge, e.g. http://192.168.1.50:8081 — used for the camera stream and to load the CV engine." /></template>
           </v-text-field>
           <v-text-field v-model="cfg.opencvUrl" density="compact" variant="outlined" hide-details class="mb-3"
                         :label="$t('plugins.duetToolAlign.settings.opencvUrl')" :placeholder="$t('plugins.duetToolAlign.settings.opencvUrlHint')">
-            <template #append-inner>
-              <v-tooltip location="top" max-width="300" text="Override the OpenCV.js URL. Leave blank to use <bridge>/opencv/opencv.js (recommended).">
-                <template #activator="{ props }"><v-icon v-bind="props" size="16" color="medium-emphasis">mdi-information-outline</v-icon></template>
-              </v-tooltip>
-            </template>
+            <template #append-inner><HelpTip text="Override the OpenCV.js URL. Leave blank to use <bridge>/opencv/opencv.js (recommended)." /></template>
           </v-text-field>
 
           <div class="text-caption text-medium-emphasis mb-1">{{ $t("plugins.duetToolAlign.settings.alignmentHeading") }}</div>
@@ -201,21 +193,13 @@
             <v-select v-model="cfg.referenceMode" :items="refModeItems" item-title="title" item-value="value"
                       density="compact" variant="outlined" hide-details class="aa-select"
                       :label="$t('plugins.duetToolAlign.settings.referenceMode')">
-              <template #append-inner>
-                <v-tooltip location="top" max-width="320" text="How the 0,0 origin is defined. Reference tool: a tool (e.g. T0) is the origin, others are relative to it. Carriage datum: a fixed point on the carriage (e.g. the E3D toolchanger switch) is the origin — capture it once and every tool is offset from it. (default: Reference tool)">
-                  <template #activator="{ props }"><v-icon v-bind="props" size="16" color="medium-emphasis">mdi-information-outline</v-icon></template>
-                </v-tooltip>
-              </template>
+              <template #append-inner><HelpTip text="How the 0,0 origin is defined. Reference tool: a tool (e.g. T0) is the origin, others are relative to it. Carriage datum: a fixed point on the carriage (e.g. the E3D toolchanger switch) is the origin — capture it once and every tool is offset from it. (default: Reference tool)" /></template>
             </v-select>
             <v-text-field v-for="f in alignFields" :key="f.key" :model-value="getNum(f.key)" @update:model-value="setNum(f.key, $event)"
                           type="number" :min="f.min" :max="f.max" :step="f.step ?? 1"
                           density="compact" variant="outlined" hide-details class="aa-field"
                           :label="$t('plugins.duetToolAlign.settings.' + f.key)">
-              <template #append-inner>
-                <v-tooltip location="top" max-width="300" :text="fieldTip(f)">
-                  <template #activator="{ props }"><v-icon v-bind="props" size="16" color="medium-emphasis">mdi-information-outline</v-icon></template>
-                </v-tooltip>
-              </template>
+              <template #append-inner><HelpTip :text="fieldTip(f)" /></template>
             </v-text-field>
             <v-tooltip location="top" max-width="300" text="Check GitHub for a newer plugin release on load and show it (here and in Flexible Layouts' unified popup). (default: on)">
               <template #activator="{ props }">
@@ -248,11 +232,7 @@
                           type="number" :min="f.min" :max="f.max" :step="f.step ?? 1"
                           density="compact" variant="outlined" hide-details class="aa-field"
                           :label="$t('plugins.duetToolAlign.settings.' + f.key)">
-              <template #append-inner>
-                <v-tooltip location="top" max-width="300" :text="fieldTip(f)">
-                  <template #activator="{ props }"><v-icon v-bind="props" size="16" color="medium-emphasis">mdi-information-outline</v-icon></template>
-                </v-tooltip>
-              </template>
+              <template #append-inner><HelpTip :text="fieldTip(f)" /></template>
             </v-text-field>
           </div>
         </v-expansion-panel-text>
@@ -263,6 +243,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { HelpTip } from "dwc-plugin-runtime";
 
 import { showConfirmDialog } from "@/composables/useConfirmDialog";
 import i18n from "@/i18n";
