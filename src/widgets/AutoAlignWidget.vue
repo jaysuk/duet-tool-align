@@ -300,14 +300,26 @@ async function ensureCv(): Promise<boolean> {
 }
 
 // --- Camera stream + overlay ---------------------------------------------------
+// `tick` cache-busts the <img> src to force a fresh /stream connection. It must only change on
+// an actual load failure (with a backoff) -- MJPEG is one long-lived multipart response, so
+// bumping it on a blind timer tears down and reopens a healthy connection every cycle. Cheap
+// backends (esp_http_server-class boards) run a small fixed pool of concurrent stream slots, so
+// churning through them like that can exhaust it -- worse the lower the frame rate/resolution,
+// since a fresh connection can get torn down again before its first frame ever arrives.
 const tick = ref(0);
-let timer: ReturnType<typeof setInterval> | null = null;
+let timer: ReturnType<typeof setTimeout> | null = null;
 const streamSrc = computed(() => {
   if (!cfg.bridgeUrl) return "";
   const base = cfg.bridgeUrl.replace(/\/+$/, "") + "/stream";
   return base + (base.includes("?") ? "&" : "?") + "_t=" + tick.value;
 });
-function onImgError(): void { /* retried by the refresh tick */ }
+function onImgError(): void {
+  if (timer) return; // a retry is already scheduled
+  timer = setTimeout(() => {
+    timer = null;
+    tick.value = Date.now();
+  }, 2000);
+}
 
 const lastDetection = ref<Vec2 | null>(null);
 const lastRadius = ref(0);
@@ -762,11 +774,10 @@ function reloadPage(): void {
 // otherwise never load and the status would sit on "not loaded". This also surfaces a bad URL /
 // missing /opencv assets immediately as a clear error.
 onMounted(() => {
-  timer = setInterval(() => { tick.value = Date.now(); }, 1000);
   if (cfg.bridgeUrl) void ensureCv();
 });
 watch(() => cfg.bridgeUrl, (url) => { if (url && !cvReady.value && !cvLoading.value) void ensureCv(); });
-onBeforeUnmount(() => { aborted = true; if (timer) clearInterval(timer); detector.dispose(); });
+onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector.dispose(); });
 </script>
 
 <style scoped>
