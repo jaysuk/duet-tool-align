@@ -82,6 +82,14 @@
       </v-tooltip>
     </div>
 
+    <!-- Live machine position -- otherwise you're jogging blind unless you're also watching DWC's
+         own status bar elsewhere. -->
+    <div class="aa-pos text-caption text-medium-emphasis px-1 pt-1 flex-shrink-0 d-flex ga-3 aa-num">
+      <span>X {{ fmtPos(livePos.x) }}</span>
+      <span>Y {{ fmtPos(livePos.y) }}</span>
+      <span>Z {{ fmtPos(livePos.z) }}</span>
+    </div>
+
     <!-- Manual X/Y jog (bring a tool into frame) + unload the active tool -->
     <div class="aa-jog d-flex flex-wrap align-center ga-1 px-1 pt-1 flex-shrink-0">
       <span class="text-caption text-medium-emphasis mr-1">{{ $t("plugins.duetToolAlign.jog.label") }}</span>
@@ -125,8 +133,12 @@
         {{ $t("plugins.duetToolAlign.actions.stop") }}
       </v-btn>
     </div>
-    <div v-if="!allHomed" class="text-caption text-warning px-2 pt-1 flex-shrink-0">
-      <v-icon size="14">mdi-alert</v-icon> {{ $t("plugins.duetToolAlign.notHomed") }}
+    <div v-if="!allHomed" class="text-caption text-warning px-2 pt-1 flex-shrink-0 d-flex align-center ga-1">
+      <v-icon size="14">mdi-alert</v-icon> <span>{{ $t("plugins.duetToolAlign.notHomed") }}</span>
+      <v-spacer />
+      <v-btn size="x-small" variant="tonal" color="warning" :disabled="disabledNow" @click="homeAll">
+        {{ $t("plugins.duetToolAlign.actions.homeAll") }}
+      </v-btn>
     </div>
 
     <!-- Offsets table -->
@@ -390,6 +402,10 @@ function machinePos(letter: "X" | "Y" | "Z"): number | null {
   return a && typeof a.machinePosition === "number" ? a.machinePosition : null;
 }
 const allHomed = computed(() => ["X", "Y"].every((l) => axisRow(l)?.homed));
+const livePos = computed(() => ({ x: machinePos("X"), y: machinePos("Y"), z: machinePos("Z") }));
+function fmtPos(v: number | null): string {
+  return v == null ? "—" : v.toFixed(2);
+}
 
 function refOffset(): ToolOffset {
   const arr = resolveOmPath(machineStore.model, "tools");
@@ -500,6 +516,12 @@ function jogXY(axis: "X" | "Y", dir: number): void {
 function unloadTool(): void {
   if (disabledNow.value) return;
   void send("T-1");
+}
+
+// Bare G28 runs the machine's own homeall.g on RRF -- same as DWC's own Home All button.
+function homeAll(): void {
+  if (disabledNow.value) return;
+  void send("G28");
 }
 
 // Capture the current machine XY as the carriage datum (referenceMode = "point").

@@ -21,6 +21,7 @@
 		"setFirst": "Set the camera position first."
 	},
 	"actions": {
+		"homeAll": "Home All",
 		"calibrate": "Calibrate",
 		"centre": "Centre & capture tool",
 		"runFull": "Align loaded tool",
