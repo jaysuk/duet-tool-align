@@ -36,8 +36,8 @@
 	"autotune": {
 		"button": "Auto-tune",
 		"trying": "Auto-tuning: trying {value}…",
-		"done": "Auto-tune found stable settings ({value}).",
-		"fail": "Auto-tune couldn't find a stable detection — check focus and the Min/Max radius range, then try again."
+		"done": "Auto-tune set {field} to {value} for {profile} — already applied, see Detection settings below.",
+		"fail": "Auto-tune couldn't find a stable detection for {profile} — check focus and the Min/Max radius range, then try again."
 	},
 	"detect": {
 		"found": "Detected at {x},{y}  r={r}px",

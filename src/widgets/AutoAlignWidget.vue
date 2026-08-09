@@ -1285,6 +1285,10 @@ async function autoTune(): Promise<void> {
     const base = resolveDetectionSettings(editingProfileKey.value);
     const usingHough = base.detector === "hough";
     const sweep = usingHough ? HOUGH_SWEEP : CONTOUR_SWEEP;
+    // Named for the completion message -- the whole point is telling the user WHERE the result landed
+    // (setDetectNum already wrote it live into the Detection fields below; nothing further to "apply").
+    const profileLabel = profileOptions.value.find((o) => o.value === editingProfileKey.value)?.title ?? "";
+    const fieldLabel = i18n.global.t(usingHough ? "plugins.duetToolAlign.settings.houghParam2" : "plugins.duetToolAlign.settings.minCircularity");
     for (const v of sweep) {
       if (aborted) break;
       setStatus(i18n.global.t("plugins.duetToolAlign.autotune.trying", { value: v }));
@@ -1296,11 +1300,17 @@ async function autoTune(): Promise<void> {
           setDetectNum("minCircularity", v);
           setDetectNum("threshold", 0);
         }
-        setStatus(i18n.global.t("plugins.duetToolAlign.autotune.done", { value: v }), "ok");
+        const msg = i18n.global.t("plugins.duetToolAlign.autotune.done", { field: fieldLabel, value: v, profile: profileLabel });
+        setStatus(msg, "ok");
+        notify(msg, LogLevel.success);
         return;
       }
     }
-    if (!aborted) setStatus(i18n.global.t("plugins.duetToolAlign.autotune.fail"), "error");
+    if (!aborted) {
+      const msg = i18n.global.t("plugins.duetToolAlign.autotune.fail", { profile: profileLabel });
+      setStatus(msg, "error");
+      notify(msg, LogLevel.warning);
+    }
   } finally {
     busy.value = false;
   }
