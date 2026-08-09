@@ -32,7 +32,8 @@
                       :placeholder="$t('plugins.duetToolAlign.settings.bridgeUrlHint')"
                       @keyup.enter="commitBridgeUrlDraft" @blur="commitBridgeUrlDraft" />
       </div>
-      <img v-else ref="imgEl" :src="streamSrc" class="aa-img" @error="onImgError" />
+      <img v-else ref="imgEl" :src="streamSrc" class="aa-img" :class="{ 'aa-img-measuring': measuring }"
+           @error="onImgError" @contextmenu.prevent="toggleMeasure" @click="onImgMeasureClick" />
 
       <div class="aa-overlay">
         <div class="aa-cross-h" />
@@ -48,6 +49,15 @@
           <div class="aa-ring-label aa-ring-label-max" :style="{ top: labelTopPx(cfg.maxRadiusPx) }">max {{ cfg.maxRadiusPx }}px</div>
         </template>
         <div v-if="detectionStyle" class="aa-circle" :style="detectionStyle" />
+        <svg v-if="measureADisp && measureBDisp" class="aa-measure-svg">
+          <line :x1="measureADisp.x" :y1="measureADisp.y" :x2="measureBDisp.x" :y2="measureBDisp.y" />
+        </svg>
+        <div v-if="measureADisp" class="aa-measure-pt" :style="{ left: measureADisp.x + 'px', top: measureADisp.y + 'px' }" />
+        <div v-if="measureBDisp" class="aa-measure-pt" :style="{ left: measureBDisp.x + 'px', top: measureBDisp.y + 'px' }" />
+        <div v-if="measureMidDisp && measureDistPx != null" class="aa-measure-label"
+             :style="{ left: measureMidDisp.x + 'px', top: measureMidDisp.y + 'px' }">
+          {{ measureDistPx.toFixed(0) }}px<span v-if="measureDistMm != null"> ({{ measureDistMm.toFixed(2) }}mm)</span>
+        </div>
       </div>
     </div>
     </div>
@@ -97,6 +107,13 @@
         <template #activator="{ props }">
           <v-btn v-bind="props" size="small" :variant="showScale ? 'flat' : 'tonal'" :color="showScale ? 'primary' : undefined"
                  icon="mdi-ruler" :disabled="!cfg.bridgeUrl" @click="showScale = !showScale" />
+        </template>
+      </v-tooltip>
+      <v-tooltip location="top" max-width="260"
+                 text="Measure between two points on the image (px, and mm once calibrated). Right-click the image to arm/disarm, or use this button; then click two points. A third click starts a new measurement.">
+        <template #activator="{ props }">
+          <v-btn v-bind="props" size="small" :variant="measuring ? 'flat' : 'tonal'" :color="measuring ? 'primary' : undefined"
+                 icon="mdi-map-marker-distance" :disabled="!cfg.bridgeUrl" @click="toggleMeasure" />
         </template>
       </v-tooltip>
       <v-spacer />
@@ -343,7 +360,17 @@
             </v-text-field>
           </div>
 
-          <div class="text-caption text-medium-emphasis mt-2 mb-1">{{ $t("plugins.duetToolAlign.settings.detectionHeading") }}</div>
+          <div class="d-flex align-center mt-2 mb-1">
+            <div class="text-caption text-medium-emphasis">{{ $t("plugins.duetToolAlign.settings.detectionHeading") }}</div>
+            <v-spacer />
+            <v-tooltip location="top" text="Reset every Detection setting below back to its default value.">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" size="x-small" variant="text" prepend-icon="mdi-restore" @click="resetDetectionDefaults">
+                  {{ $t("plugins.duetToolAlign.settings.resetDetection") }}
+                </v-btn>
+              </template>
+            </v-tooltip>
+          </div>
           <div class="d-flex ga-2 flex-wrap align-center mb-2">
             <v-select v-model="cfg.detector" :items="detectorItems" item-title="title" item-value="value"
                       density="compact" variant="outlined" hide-details class="aa-select"
@@ -392,7 +419,7 @@ import { type AutoAlignConfig, defaultConfig, resolveOpencvUrl, useConfig } from
 import { type DetectParams, pickLargest, pickNearestToCentre } from "../cv/detectNozzle";
 import { WorkerDetector } from "../cv/detectorWorker";
 import { grabFrame } from "../cv/frameGrabber";
-import { medianPoint } from "../cv/geometry";
+import { apply2, magnitude, medianPoint } from "../cv/geometry";
 import type { Mat2, Vec2 } from "../cv/geometry";
 import { centreTool, type MachineIO, runCalibration } from "../model/orchestrator";
 import { applying, dismissCurrentUpdate, dismissedVersion, applyUpdateNow, pendingReload, updateState } from "../model/updateCheck";
@@ -546,6 +573,56 @@ function labelTopPx(radiusPx: number): string {
   const scale = imgScale.value ?? 0;
   return `calc(50% - ${radiusPx * scale}px - 4px)`;
 }
+
+// --- Click-to-measure: right-click (or the ruler-line button) arms it, then two left clicks mark the
+// endpoints. A third click starts a new measurement rather than requiring re-arming each time. Points
+// are stored in original-frame px like everything else; apply2(transform, ...) converts to mm using
+// the same calibration the alignment loop itself uses, when one exists.
+const measuring = ref(false);
+const measureA = ref<Vec2 | null>(null);
+const measureB = ref<Vec2 | null>(null);
+function toggleMeasure(): void {
+  measuring.value = !measuring.value;
+  measureA.value = null;
+  measureB.value = null;
+}
+function frameCoordsFromEvent(e: MouseEvent): Vec2 | null {
+  const img = imgEl.value;
+  const scale = imgScale.value;
+  if (!img || !scale) return null;
+  const rect = img.getBoundingClientRect();
+  return { x: (e.clientX - rect.left) / scale, y: (e.clientY - rect.top) / scale };
+}
+function onImgMeasureClick(e: MouseEvent): void {
+  if (!measuring.value) return;
+  const p = frameCoordsFromEvent(e);
+  if (!p) return;
+  if (!measureA.value || measureB.value) { measureA.value = p; measureB.value = null; }
+  else measureB.value = p;
+}
+const measureDistPx = computed(() => {
+  if (!measureA.value || !measureB.value) return null;
+  return magnitude({ x: measureB.value.x - measureA.value.x, y: measureB.value.y - measureA.value.y });
+});
+const measureDistMm = computed(() => {
+  if (!measureA.value || !measureB.value || !transform.value) return null;
+  const d = apply2(transform.value, { x: measureB.value.x - measureA.value.x, y: measureB.value.y - measureA.value.y });
+  return magnitude(d);
+});
+// Display-px line endpoints for the SVG (frame px -> display px, relative to .aa-cam like everything
+// else in the overlay), and the midpoint for the distance label.
+function ptStyle(p: Vec2 | null): { x: number; y: number } | null {
+  const img = imgEl.value;
+  const scale = imgScale.value;
+  if (!p || !img || !scale) return null;
+  return { x: img.offsetLeft + p.x * scale, y: img.offsetTop + p.y * scale };
+}
+const measureADisp = computed(() => ptStyle(measureA.value));
+const measureBDisp = computed(() => ptStyle(measureB.value));
+const measureMidDisp = computed(() => {
+  const a = measureADisp.value, b = measureBDisp.value;
+  return a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : null;
+});
 
 // --- Status --------------------------------------------------------------------
 const statusText = ref(i18n.global.t("plugins.duetToolAlign.cv.notReady"));
@@ -980,6 +1057,26 @@ function fieldTip(f: NumField): string {
   return `${f.tip} (default: ${DEFAULTS[f.key]})`;
 }
 
+// Reset just the Detection section (detector choice + every tuning field) -- not Alignment & motion,
+// bridge URL, etc. -- back to built-in defaults, e.g. after tuning knobs into a bad state.
+function resetDetectionDefaults(): void {
+  const d = defaultConfig();
+  cfg.detector = d.detector;
+  cfg.pickLargest = d.pickLargest;
+  cfg.darkBore = d.darkBore;
+  cfg.minRadiusPx = d.minRadiusPx;
+  cfg.maxRadiusPx = d.maxRadiusPx;
+  cfg.blurKsize = d.blurKsize;
+  cfg.detectWidth = d.detectWidth;
+  cfg.houghDp = d.houghDp;
+  cfg.houghParam1 = d.houghParam1;
+  cfg.houghParam2 = d.houghParam2;
+  cfg.houghMinDist = d.houghMinDist;
+  cfg.threshold = d.threshold;
+  cfg.minCircularity = d.minCircularity;
+  notify(i18n.global.t("plugins.duetToolAlign.settings.resetDetectionDone"), LogLevel.success);
+}
+
 // --- Update notification (announced into the shared hub; banner is the in-context surface) ---
 // Whether checks happen at all is toggled from AboutDialog (the "i" button) or Flexible Layouts'
 // unified update hub when embedded there -- not duplicated here.
@@ -1036,6 +1133,7 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
 
 .aa-cam { position: relative; width: 100%; aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #000; }
 .aa-img { max-width: 100%; max-height: 100%; display: block; object-fit: contain; }
+.aa-img-measuring { cursor: crosshair; }
 /* The setup prompt (shown until a bridge URL is set) sits on a normal surface, not the black camera
    backdrop, so the input is readable; it's always interactive regardless of connection state. */
 .aa-setup { width: 100%; max-width: 460px; background: rgb(var(--v-theme-surface)); border-radius: 6px; }
@@ -1058,6 +1156,15 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
 .aa-ring-label-scale { color: rgba(255, 255, 255, 0.75); }
 .aa-ring-label-min { color: #00e5ff; }
 .aa-ring-label-max { color: #ffb300; }
+
+/* Click-to-measure: SVG fills the same box as the crosshair/rings so the line can be drawn at
+   whatever angle, endpoints/label positioned in the same display-px space as everything else. */
+.aa-measure-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.aa-measure-svg line { stroke: #ffeb3b; stroke-width: 1.5; stroke-dasharray: 4 3; }
+.aa-measure-pt { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%;
+  background: #ffeb3b; box-shadow: 0 0 3px rgba(0, 0, 0, 0.8); }
+.aa-measure-label { position: absolute; transform: translate(-50%, -100%); margin-top: -6px; font-size: 11px;
+  white-space: nowrap; padding: 1px 4px; border-radius: 2px; background: rgba(0, 0, 0, 0.7); color: #ffeb3b; }
 
 .aa-status-info { color: rgba(127, 127, 127, 0.95); }
 .aa-status-ok { color: #2e7d32; }

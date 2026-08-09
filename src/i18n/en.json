@@ -117,6 +117,8 @@
 		"maxRadiusPx": "Max radius",
 		"alignmentHeading": "Alignment & motion",
 		"detectionHeading": "Detection — tune with live Detect running",
+		"resetDetection": "Reset to defaults",
+		"resetDetectionDone": "Detection settings reset to defaults.",
 		"detector": "Detector",
 		"methodHough": "Hough circles",
 		"methodContour": "Contour (threshold)",
