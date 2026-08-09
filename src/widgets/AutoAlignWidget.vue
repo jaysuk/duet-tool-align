@@ -21,8 +21,10 @@
       </template>
     </v-alert>
 
+    <div class="aa-main flex-grow-1 d-flex">
     <!-- Camera with crosshair + detected-circle overlay -->
-    <div class="aa-cam flex-grow-1">
+    <div class="aa-cam-col flex-shrink-0">
+    <div class="aa-cam">
       <div v-if="!cfg.bridgeUrl" class="aa-setup pa-3">
         <div class="text-caption text-medium-emphasis mb-2">{{ $t("plugins.duetToolAlign.noUrl") }}</div>
         <v-text-field v-model="cfg.bridgeUrl" density="compact" variant="outlined" hide-details autofocus
@@ -37,7 +39,9 @@
         <div v-if="detectionStyle" class="aa-circle" :style="detectionStyle" />
       </div>
     </div>
+    </div>
 
+    <div class="aa-side-col flex-grow-1 d-flex flex-column">
     <!-- Status line -->
     <div class="aa-status text-caption px-2 py-1 flex-shrink-0 d-flex align-center" :class="statusClass">
       <v-icon size="14" class="mr-1">{{ statusIcon }}</v-icon><span>{{ statusText }}</span>
@@ -238,6 +242,8 @@
         </v-expansion-panel-text>
       </v-expansion-panel>
     </v-expansion-panels>
+    </div>
+    </div>
   </div>
 </template>
 
@@ -781,9 +787,29 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
 </script>
 
 <style scoped>
-.aa-root { min-height: 0; overflow: hidden; }
+/* container-type lets .aa-main below respond to the widget's own box (it can be embedded in a
+   Flexible Layouts grid cell of any size, unrelated to viewport width) rather than the viewport. */
+.aa-root { min-height: 0; overflow: hidden; container-type: inline-size; }
 
-.aa-cam { position: relative; min-height: 120px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #000; }
+/* Camera (left) + everything else (right), side by side so the camera gets a squarish box instead
+   of being squeezed thin by every control row stacking underneath it. */
+.aa-main { min-height: 0; gap: 8px; }
+
+/* Square-ish and driven by the available height: width follows height via aspect-ratio, capped so
+   it can't crowd out the settings column on a very short/wide container. */
+.aa-cam-col { aspect-ratio: 1 / 1; height: 100%; max-width: 60%; min-width: 160px; }
+
+.aa-side-col { min-width: 0; min-height: 0; overflow-y: auto; }
+
+/* Narrow embeds (e.g. a slim Flexible Layouts panel): drop back to the original stacked layout
+   rather than crushing either column past usability. */
+@container (max-width: 480px) {
+  .aa-main { flex-direction: column; }
+  .aa-cam-col { aspect-ratio: auto; width: 100%; max-width: none; height: auto; max-height: 45vh; }
+  .aa-side-col { overflow-y: visible; }
+}
+
+.aa-cam { position: relative; width: 100%; height: 100%; min-height: 120px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #000; }
 .aa-img { max-width: 100%; max-height: 100%; display: block; object-fit: contain; }
 /* The setup prompt (shown until a bridge URL is set) sits on a normal surface, not the black camera
    backdrop, so the input is readable; it's always interactive regardless of connection state. */
