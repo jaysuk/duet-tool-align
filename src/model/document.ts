@@ -118,10 +118,10 @@ export interface AutoAlignConfig {
 
 	/** Per-tool (keyed by tool number as a string, e.g. "2") or carriage-datum ("datum") overrides for
 	 *  any subset of the DetectionSettings fields above. A missing key (or a profile with no entry for
-	 *  it) falls back to the corresponding global field. Only the profile for whichever tool is
-	 *  currently selected is used for live detection at any given moment -- the datum slot exists for
-	 *  consistency but isn't consumed by anything today, since capturing it is a direct position read,
-	 *  not camera detection. */
+	 *  it) falls back to the corresponding global field. The tool profile used for live detection always
+	 *  follows whichever tool is actually loaded; the "datum" profile is used by the camera-assisted
+	 *  "Centre & capture datum" action. The plain manual "Capture datum" action (a direct position read,
+	 *  no camera involved) ignores it entirely. */
 	detectProfiles: Record<string, Partial<DetectionSettings>>;
 
 	/** Z focus jog step, in mm (the -Z/+Z buttons that sharpen the image). */

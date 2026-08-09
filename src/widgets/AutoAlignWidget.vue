@@ -304,7 +304,15 @@
           </template>
         </v-tooltip>
         <template v-if="cfg.referenceMode === 'point'">
-          <v-tooltip location="top" text="Capture the current machine XY as the carriage datum -- every tool's offset (T0 included) is measured from this point.">
+          <v-tooltip location="top" text="Centre the carriage datum target on the crosshair using the camera (its own Detection profile, if set) and record the converged position -- every tool's offset (T0 included) is measured from this point. Bring the target roughly into frame first (e.g. Unload/T-1).">
+            <template #activator="{ props }">
+              <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-image-filter-center-focus"
+                     :disabled="disabledNow || detecting || !transform" @click="centreDatum">
+                {{ $t("plugins.duetToolAlign.offsets.centreDatum") }}
+              </v-btn>
+            </template>
+          </v-tooltip>
+          <v-tooltip location="top" text="Manually record the current machine XY as the carriage datum, without camera assistance -- use this if the datum target isn't something the camera can detect. Jog the switch/feature onto the crosshair first.">
             <template #activator="{ props }">
               <v-btn v-bind="props" size="small" variant="text" prepend-icon="mdi-crosshairs-gps" :disabled="disabledNow" @click="captureRefPoint">
                 {{ $t("plugins.duetToolAlign.offsets.captureDatum") }}
@@ -732,14 +740,18 @@ function detectParams(s: DetectionSettings): DetectParams {
   };
 }
 
-async function detectOnce(): Promise<Vec2 | null> {
+// profileKeyOverride lets a caller detect against a specific profile (e.g. "datum" for the carriage
+// centring loop) instead of whichever tool happens to be loaded. Omitted (not just falsy -- "datum"
+// itself would be falsy-string-safe but Global is `null`) means "follow the loaded tool", so the live
+// Detect toggle and per-tool centring keep working exactly as before.
+async function detectOnce(profileKeyOverride?: string | null): Promise<Vec2 | null> {
   if (!cvReady.value || !cfg.bridgeUrl) return null;
   try {
     const img = await grabFrame(cfg.bridgeUrl);
     frameW.value = img.width;
     frameH.value = img.height;
     const centre = { x: img.width / 2, y: img.height / 2 };
-    const settings = resolveDetectionSettings(liveProfileKey.value);
+    const settings = resolveDetectionSettings(profileKeyOverride !== undefined ? profileKeyOverride : liveProfileKey.value);
     // detect() transfers the pixel buffer to the worker, so read dimensions/centre first.
     const res = await detector.detect(img, detectParams(settings));
     if (detector.lastError) setStatus(i18n.global.t("plugins.duetToolAlign.detect.error", { msg: detector.lastError }), "error");
@@ -929,6 +941,28 @@ async function centreCurrent(): Promise<void> {
     if (res.ok && res.position) {
       captureXY(current.value, res.position);
       setStatus(i18n.global.t("plugins.duetToolAlign.centre.done"), "ok");
+    } else {
+      setStatus(i18n.global.t("plugins.duetToolAlign.centre.fail", { msg: res.error ?? "" }), "error");
+    }
+  } finally {
+    busy.value = false;
+  }
+}
+
+// Camera-assisted counterpart to captureRefPoint(): converges on the carriage datum target the same
+// way centreCurrent() converges on a tool's nozzle, using the "datum" Detection profile (if the user
+// has set one up -- otherwise it falls back to Global, same as any other unconfigured profile), then
+// records the converged machine XY as the reference point.
+async function centreDatum(): Promise<void> {
+  if (busy.value) return;
+  if (!transform.value) { setStatus(i18n.global.t("plugins.duetToolAlign.calib.needed"), "error"); return; }
+  if (!(await ensureCv())) return;
+  busy.value = true; aborted = false;
+  try {
+    const res = await centreTool(machineIO, () => detectOnce("datum"), transform.value, frameCentre(), motionParams(), progress);
+    if (res.ok && res.position) {
+      refPoint.value = res.position;
+      notify(i18n.global.t("plugins.duetToolAlign.offsets.datumSaved"), LogLevel.success);
     } else {
       setStatus(i18n.global.t("plugins.duetToolAlign.centre.fail", { msg: res.error ?? "" }), "error");
     }

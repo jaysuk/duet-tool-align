@@ -50,7 +50,7 @@
 	"run": {
 		"done": "Alignment complete.",
 		"aborted": "Alignment stopped.",
-		"needRefPoint": "Capture the carriage datum first: jog the switch/feature onto the crosshair, then Capture datum."
+		"needRefPoint": "Capture the carriage datum first: bring the target into frame, then Centre & capture datum (or jog it onto the crosshair and use Capture datum manually)."
 	},
 	"tools": {
 		"reference": "Reference tool",
@@ -70,7 +70,8 @@
 		"invert": "Invert offsets",
 		"refBadge": "ref",
 		"setRef": "Set reference",
-		"captureDatum": "Capture datum",
+		"centreDatum": "Centre & capture datum",
+		"captureDatum": "Capture datum (manual)",
 		"datum": "Datum",
 		"datumSaved": "Datum point captured.",
 		"capture": "Capture XY",
