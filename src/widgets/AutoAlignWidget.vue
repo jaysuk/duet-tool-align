@@ -1655,8 +1655,12 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
    overridden, since the window's own height doesn't renegotiate for that. Forcing it visible/auto lets
    the step's real content height reach aa-side-col, where overflow-y: auto can actually scroll to it. */
 .aa-stepper { min-width: 0; min-height: 0; }
-.aa-stepper :deep(.v-stepper-window) { overflow: visible; }
+.aa-stepper :deep(.v-stepper-window) { overflow: visible; margin: 12px 0 0; }
 .aa-stepper :deep(.v-window__container) { height: auto !important; }
+/* Vuetify's default step-header padding (1.5rem / 24px all round on each .v-stepper-item, per
+   VStepperItem.css) is sized for a much roomier layout than this widget has room for -- it's most of
+   why the header bar reads as too tall for a one-line "① Camera" label. */
+.aa-stepper :deep(.v-stepper-item) { padding: 10px 14px; }
 .aa-choice-card { flex: 1 1 220px; min-width: 220px; cursor: pointer; }
 
 .aa-grid { width: 100%; border-collapse: collapse; font-size: 0.8em; }
