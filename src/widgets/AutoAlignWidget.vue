@@ -205,12 +205,6 @@
                           :label="$t('plugins.duetToolAlign.settings.' + f.key)">
               <template #append-inner><HelpTip :text="fieldTip(f)" /></template>
             </v-text-field>
-            <v-tooltip location="top" max-width="300" text="Check GitHub for a newer plugin release on load and show it (here and in Flexible Layouts' unified popup). (default: on)">
-              <template #activator="{ props }">
-                <v-switch v-bind="props" v-model="updateChecks" density="compact" hide-details color="primary"
-                          :label="$t('plugins.duetToolAlign.settings.updateChecks')" />
-              </template>
-            </v-tooltip>
           </div>
 
           <div class="text-caption text-medium-emphasis mt-2 mb-1">{{ $t("plugins.duetToolAlign.settings.detectionHeading") }}</div>
@@ -265,7 +259,7 @@ import { grabFrame } from "../cv/frameGrabber";
 import { medianPoint } from "../cv/geometry";
 import type { Mat2, Vec2 } from "../cv/geometry";
 import { centreTool, type MachineIO, runCalibration } from "../model/orchestrator";
-import { applying, dismissCurrentUpdate, dismissedVersion, applyUpdateNow, pendingReload, updateChecksEnabled, setUpdateChecksEnabled, updateState } from "../model/updateCheck";
+import { applying, dismissCurrentUpdate, dismissedVersion, applyUpdateNow, pendingReload, updateState } from "../model/updateCheck";
 
 // Per-instance config injection (the widget-config framework contract): a host (Flexible Layouts)
 // passes a reactive `config` object it persists; the standalone page passes nothing, so we fall back
@@ -769,12 +763,10 @@ function fieldTip(f: NumField): string {
 }
 
 // --- Update notification (announced into the shared hub; banner is the in-context surface) ---
+// Whether checks happen at all is toggled from AboutDialog (the "i" button) or Flexible Layouts'
+// unified update hub when embedded there -- not duplicated here.
 const updateBannerVisible = computed(() =>
   !!updateState.value?.updateAvailable && updateState.value.latestVersion !== dismissedVersion.value);
-const updateChecks = computed({
-  get: () => updateChecksEnabled(),
-  set: (v: boolean) => setUpdateChecksEnabled(v),
-});
 function reloadPage(): void {
   window.location.reload();
 }
