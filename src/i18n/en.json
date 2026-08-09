@@ -33,6 +33,19 @@
 		"label": "Focus (Z)",
 		"assist": "Focus"
 	},
+	"wizard": {
+		"step1": "1. Camera",
+		"step2": "2. Reference",
+		"step3": "3. Calibrate",
+		"step4": "4. Align tools",
+		"step5": "5. Review & save",
+		"checklistLoad": "Load {name}",
+		"checklistFrame": "Go to camera, then jog {name}'s nozzle into frame",
+		"checklistDetect": "Confirm Detect locks on cleanly",
+		"checklistAlign": "Align loaded tool",
+		"noTools": "No tools found in the object model.",
+		"toolProgress": "{index} of {total}"
+	},
 	"autotune": {
 		"button": "Auto-tune",
 		"trying": "Auto-tuning: trying {value}…",
@@ -46,6 +59,7 @@
 	},
 	"calib": {
 		"done": "Calibrated: {residual} mm residual ({used} samples).",
+		"summary": "{residual} mm residual ({used} samples)",
 		"fail": "Calibration failed: {msg}",
 		"needed": "Calibrate the camera before aligning."
 	},
