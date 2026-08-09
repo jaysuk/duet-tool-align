@@ -34,11 +34,11 @@
 		"assist": "Focus"
 	},
 	"wizard": {
-		"step1": "1. Camera",
-		"step2": "2. Reference",
-		"step3": "3. Calibrate",
-		"step4": "4. Align tools",
-		"step5": "5. Review & save",
+		"step1": "Camera",
+		"step2": "Reference",
+		"step3": "Calibrate",
+		"step4": "Align tools",
+		"step5": "Review & save",
 		"checklistLoad": "Load {name}",
 		"checklistFrame": "Go to camera, then jog {name}'s nozzle into frame",
 		"checklistDetect": "Confirm Detect locks on cleanly",
