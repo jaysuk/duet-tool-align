@@ -33,6 +33,12 @@
 		"label": "Focus (Z)",
 		"assist": "Focus"
 	},
+	"autotune": {
+		"button": "Auto-tune",
+		"trying": "Auto-tuning: trying {value}…",
+		"done": "Auto-tune found stable settings ({value}).",
+		"fail": "Auto-tune couldn't find a stable detection — check focus and the Min/Max radius range, then try again."
+	},
 	"detect": {
 		"found": "Detected at {x},{y}  r={r}px",
 		"none": "No nozzle found — adjust focus, radius range, or sensitivity",
@@ -120,6 +126,7 @@
 		"detectionHeading": "Detection — tune with live Detect running",
 		"resetDetection": "Reset to defaults",
 		"resetDetectionDone": "Detection settings reset to defaults.",
+		"radiusFromMeasureDone": "Set Min/Max radius from measurement ({min}-{max}px).",
 		"profile": "Profile",
 		"profileGlobal": "Global (default)",
 		"profileDatum": "Carriage datum",

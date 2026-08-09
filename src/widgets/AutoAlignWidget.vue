@@ -116,6 +116,20 @@
                  icon="mdi-map-marker-distance" :disabled="!cfg.bridgeUrl" @click="toggleMeasure" />
         </template>
       </v-tooltip>
+      <v-tooltip location="top" max-width="280"
+                 text="Set Min/Max radius (for the profile selected in Settings → Detection) from the last measurement: click across the nozzle bore's visible diameter with the measure tool, then use this to set a range around half that distance.">
+        <template #activator="{ props }">
+          <v-btn v-bind="props" size="small" variant="tonal" icon="mdi-diameter" :disabled="measureDistPx == null" @click="applyMeasuredRadius" />
+        </template>
+      </v-tooltip>
+      <v-tooltip location="top" max-width="280"
+                 text="Auto-tune detection sensitivity for the profile selected in Settings → Detection: sweeps from strict to loose, keeping Min/Max radius fixed, and stops at the strictest setting that reliably finds one centred candidate across several frames. Set Min/Max radius correctly first.">
+        <template #activator="{ props }">
+          <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-auto-fix" :disabled="busy || detecting || !cfg.bridgeUrl" @click="autoTune">
+            {{ $t("plugins.duetToolAlign.autotune.button") }}
+          </v-btn>
+        </template>
+      </v-tooltip>
       <v-spacer />
       <span class="text-caption text-medium-emphasis mr-1">{{ $t("plugins.duetToolAlign.focus.label") }}</span>
       <v-tooltip location="top" text="Jog Z down by the step size, to bring the nozzle into focus.">
@@ -1212,6 +1226,84 @@ function resetDetectionDefaults(): void {
   const target = activeStore();
   for (const k of DETECTION_KEYS) target[k] = d[k];
   notify(i18n.global.t("plugins.duetToolAlign.settings.resetDetectionDone"), LogLevel.success);
+}
+
+// --- Auto radius from a measurement -------------------------------------------
+// Click-to-measure across the visible bore's diameter, then derive a Min/Max radius range around half
+// that distance (±25% margin for size/lighting variation across frames) for the browsed profile. Radius
+// range is the setting most tedious to guess correctly and the one everything else (Hough's search
+// range, the contour size filter) depends on, so this is the highest-value thing to automate first.
+function applyMeasuredRadius(): void {
+  const dist = measureDistPx.value;
+  if (dist == null) return;
+  const radius = dist / 2;
+  if (editingLocked.value) toggleOverride();
+  const minR = Math.max(1, Math.round(radius * 0.75));
+  const maxR = Math.max(minR + 1, Math.round(radius * 1.25));
+  setDetectNum("minRadiusPx", minR);
+  setDetectNum("maxRadiusPx", maxR);
+  notify(i18n.global.t("plugins.duetToolAlign.settings.radiusFromMeasureDone", { min: minR, max: maxR }), LogLevel.success);
+}
+
+// --- Auto-tune sensitivity -----------------------------------------------------
+// Sweeps the detector's main sensitivity knob (Hough's param2, or contour's minCircularity) from strict
+// to loose, keeping every other setting (crucially Min/Max radius -- set that first, e.g. via
+// applyMeasuredRadius above) fixed at the browsed profile's current values. Picks the strictest step
+// that reliably finds exactly one centred candidate: strict-first minimises false positives, and
+// requiring several consistent frames (not just one) avoids latching onto a one-off glare/noise blob.
+const AUTOTUNE_FRAMES = 5;
+const AUTOTUNE_HITS = 4; // of AUTOTUNE_FRAMES, must see exactly one centred candidate at least this often
+const HOUGH_SWEEP: ReadonlyArray<number> = [90, 70, 55, 45, 36, 29, 23, 18, 14, 11];
+const CONTOUR_SWEEP: ReadonlyArray<number> = [0.85, 0.75, 0.65, 0.55, 0.45, 0.35];
+
+// Runs `settings` against several fresh frames and reports whether exactly one candidate near frame
+// centre showed up consistently, with a stable radius (not jumping between a real detection and noise).
+async function trySettings(settings: DetectionSettings): Promise<boolean> {
+  const centre = frameCentre();
+  const nearRadius = Math.min(frameW.value || 640, frameH.value || 480) * 0.35;
+  let hits = 0;
+  const radii: Array<number> = [];
+  for (let i = 0; i < AUTOTUNE_FRAMES; i++) {
+    if (aborted) return false;
+    const img = await grabFrame(cfg.bridgeUrl);
+    const res = await detector.detect(img, detectParams(settings));
+    const near = res.circles.filter((c) => Math.hypot(c.x - centre.x, c.y - centre.y) < nearRadius);
+    if (near.length === 1) { hits++; radii.push(near[0].r); }
+  }
+  if (hits < AUTOTUNE_HITS) return false;
+  const meanR = radii.reduce((a, b) => a + b, 0) / radii.length;
+  const spread = Math.max(...radii) - Math.min(...radii);
+  return spread <= meanR * 0.25;
+}
+
+async function autoTune(): Promise<void> {
+  if (busy.value) return;
+  if (!(await ensureCv())) return;
+  busy.value = true; aborted = false;
+  try {
+    if (editingLocked.value) toggleOverride();
+    const base = resolveDetectionSettings(editingProfileKey.value);
+    const usingHough = base.detector === "hough";
+    const sweep = usingHough ? HOUGH_SWEEP : CONTOUR_SWEEP;
+    for (const v of sweep) {
+      if (aborted) break;
+      setStatus(i18n.global.t("plugins.duetToolAlign.autotune.trying", { value: v }));
+      const trial: DetectionSettings = usingHough ? { ...base, houghParam2: v } : { ...base, minCircularity: v, threshold: 0 };
+      if (await trySettings(trial)) {
+        if (usingHough) {
+          setDetectNum("houghParam2", v);
+        } else {
+          setDetectNum("minCircularity", v);
+          setDetectNum("threshold", 0);
+        }
+        setStatus(i18n.global.t("plugins.duetToolAlign.autotune.done", { value: v }), "ok");
+        return;
+      }
+    }
+    if (!aborted) setStatus(i18n.global.t("plugins.duetToolAlign.autotune.fail"), "error");
+  } finally {
+    busy.value = false;
+  }
 }
 
 // --- Update notification (announced into the shared hub; banner is the in-context surface) ---
