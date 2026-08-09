@@ -1557,38 +1557,37 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
 </script>
 
 <style scoped>
-/* container-type lets .aa-main below respond to the widget's own box (it can be embedded in a
-   Flexible Layouts grid cell of any size, unrelated to viewport width) rather than the viewport. */
-.aa-root { min-height: 0; overflow: hidden; container-type: inline-size; }
+/* No internal bounded-height scroll region any more -- that (aa-root: overflow hidden + aa-side-col:
+   overflow-y auto) relied on every nested flex/Vuetify-internal box correctly propagating a taller
+   content height up to aa-side-col, and in practice Vuetify's own v-window (inside the stepper)
+   didn't always cooperate, silently clipping a step's content with nothing to scroll to. Simpler and
+   more robust: let the whole widget grow to whatever height its content needs, and let the page it's
+   on do the scrolling -- exactly like any normal DWC page already does. container-type lets .aa-main
+   below respond to the widget's own box width (it can be embedded in a Flexible Layouts grid cell of
+   any size, unrelated to viewport width) rather than the viewport. */
+.aa-root { container-type: inline-size; }
 
-/* Camera (left) + everything else (right), side by side so the camera gets a squarish box instead
-   of being squeezed thin by every control row stacking underneath it. Default align-items: stretch
-   is kept deliberately -- aa-side-col relies on it to get a bounded height so its own overflow-y:
-   auto can scroll; only aa-cam-col opts out (align-self below), since stretching it would distort
-   the square. */
-.aa-main { min-height: 0; gap: 8px; }
+/* Camera (left) + everything else (right), side by side so the camera gets a squarish box instead of
+   being squeezed thin by every control row stacking underneath it. align-items: flex-start (rather
+   than the default stretch) so the camera column stays exactly as tall as its own square regardless
+   of how much taller the step content next to it grows. */
+.aa-main { align-items: flex-start; gap: 8px; }
 
 /* 40% of the row's width -- deliberately sized off width, not height: this widget's own height often
    isn't a definite value (Flexible Layouts panels/the standalone page can auto-size to content), and
    aspect-ratio can't compute a sensible size from an indefinite one. Width is always definite here
    (the row gets it from the widget's own box), so aa-cam below can go width: 100%; aspect-ratio: 1/1
    and get a reliable square regardless of how much vertical space is actually available. Leaves the
-   step content (aa-side-col) noticeably more room than a 50/50 split did.
-   align-self: flex-start so this column doesn't stretch to aa-side-col's (taller, scrolling)
-   height -- it should stay exactly as tall as its own square content. */
-.aa-cam-col { flex: 0 0 40%; max-width: 40%; align-self: flex-start; }
+   step content (aa-side-col) noticeably more room than a 50/50 split did. */
+.aa-cam-col { flex: 0 0 40%; max-width: 40%; }
 
-/* Stretches to aa-main's full height (default align-items) so this box is actually bounded --
-   without that, overflow-y: auto has nothing to overflow against and never shows a scrollbar,
-   letting content run past aa-root's overflow: hidden with no way to reach it. */
-.aa-side-col { min-width: 0; min-height: 0; overflow-y: auto; }
+.aa-side-col { min-width: 0; }
 
 /* Narrow embeds (e.g. a slim Flexible Layouts panel): drop back to the original stacked layout
    rather than crushing either column past usability. */
 @container (max-width: 480px) {
   .aa-main { flex-direction: column; }
   .aa-cam-col { flex-basis: auto; width: 100%; max-width: none; }
-  .aa-side-col { overflow-y: visible; }
 }
 
 .aa-cam { position: relative; width: 100%; aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #000; }
