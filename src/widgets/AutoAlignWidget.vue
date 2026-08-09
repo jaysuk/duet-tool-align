@@ -126,24 +126,12 @@
     </div>
 
     <!-- Guided wizard: connect -> decide the reference origin -> calibrate (+ tune detection, capture
-         the datum) -> align each tool in turn -> review and save. Hand-built tab row + plain v-if
-         content (not v-stepper/v-window) -- Vuetify's window component clips content that grows AFTER
-         its slide transition (e.g. an Advanced accordion opening) via its own internal overflow/height
-         handling, in a way plain CSS overrides on it couldn't reliably beat. This has none of that:
-         each step is just a div, shown or not. -->
-    <div class="d-flex flex-wrap ga-2 mb-3 aa-stepper">
-      <v-btn v-for="(title, i) in stepTitles" :key="i" size="small" class="text-none"
-             :variant="step === i + 1 ? 'flat' : 'text'" :color="step === i + 1 ? 'primary' : undefined"
-             @click="step = i + 1">
-        <v-avatar size="20" class="mr-2" :color="step === i + 1 ? 'primary' : undefined"
-                  :variant="step === i + 1 ? 'flat' : 'tonal'">{{ i + 1 }}</v-avatar>
-        {{ title }}
-      </v-btn>
-    </div>
-
-    <div class="flex-grow-1">
+         the datum) -> align each tool in turn -> review and save. editable so any step can be jumped
+         to directly, same as Closed Loop Tuning's stepper. -->
+    <v-stepper v-model="step" :items="stepTitles" editable flat hide-actions class="aa-stepper flex-grow-1">
       <!-- 1. Camera -->
-      <div v-if="step === 1">
+      <template #item.1>
+        <v-card flat>
           <div class="text-body-2 mb-3">Connect to the camera bridge and confirm the live stream is coming through.</div>
           <v-text-field v-model="cfg.bridgeUrl" density="compact" variant="outlined" hide-details class="mb-2"
                         :label="$t('plugins.duetToolAlign.settings.bridgeUrl')" :placeholder="$t('plugins.duetToolAlign.settings.bridgeUrlHint')">
@@ -159,10 +147,12 @@
               </v-expansion-panel-text>
             </v-expansion-panel>
           </v-expansion-panels>
-      </div>
+        </v-card>
+      </template>
 
       <!-- 2. Reference -->
-      <div v-if="step === 2">
+      <template #item.2>
+        <v-card flat>
           <div class="text-body-2 mb-3">Choose what every tool's XY offset is measured from. Just the decision here
             — you'll capture it in step 3, once there's a calibration to centre against.</div>
           <div class="d-flex ga-3 flex-wrap">
@@ -189,10 +179,12 @@
             "Centre & capture datum" needs a calibration to converge against (it reuses the same closed-loop
             jog-to-crosshair as tool centring), so capturing the datum happens in step 3, right after Calibrate succeeds.
           </div>
-      </div>
+        </v-card>
+      </template>
 
       <!-- 3. Calibrate -->
-      <div v-if="step === 3">
+      <template #item.3>
+        <v-card flat>
           <div class="text-body-2 mb-3">Load a tool, bring its nozzle into frame, tune
             detection, and calibrate. If you're using a carriage datum, capture it below too, once calibrated.</div>
 
@@ -423,10 +415,12 @@
               </span>
             </div>
           </template>
-      </div>
+        </v-card>
+      </template>
 
       <!-- 4. Align tools -->
-      <div v-if="step === 4">
+      <template #item.4>
+        <v-card flat>
           <div class="text-body-2 mb-3">Do this once for each tool: load it, bring it into frame, confirm the lock, then align. Repeat for every tool.</div>
 
           <div v-if="tools.length" class="d-flex flex-wrap ga-2 mb-3">
@@ -535,10 +529,12 @@
               <v-btn size="small" variant="text" icon="mdi-chevron-right" :disabled="wizardToolIndex >= tools.length - 1" @click="wizardNextTool" />
             </div>
           </template>
-      </div>
+        </v-card>
+      </template>
 
       <!-- 5. Review & save -->
-      <div v-if="step === 5">
+      <template #item.5>
+        <v-card flat>
           <div class="text-body-2 mb-3">Check every tool's offset, then apply and persist.</div>
 
           <table class="aa-grid">
@@ -621,8 +617,9 @@
               </v-expansion-panel-text>
             </v-expansion-panel>
           </v-expansion-panels>
-      </div>
-    </div>
+        </v-card>
+      </template>
+    </v-stepper>
     </div>
     </div>
   </div>
@@ -1649,6 +1646,17 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
 .aa-focusbar { width: 100%; }
 .aa-focusbar-bar { max-width: 220px; }
 
+/* flex-grow-1 sizes this to "remaining space in aa-side-col", not to its actual content -- without
+   min-height: 0 a flex item's default min-height: auto stops it ever being SMALLER than its content,
+   which fights that sizing in a way that (combined with v-window's own overflow: hidden below) can
+   silently clip a step's content instead of growing aa-side-col's own scroll region to fit it. Vuetify's
+   stepper window clips overflow for its slide transition between steps; that's fine between steps, but
+   it also clips content that grows WITHIN a step (e.g. expanding an Advanced accordion) unless
+   overridden, since the window's own height doesn't renegotiate for that. Forcing it visible/auto lets
+   the step's real content height reach aa-side-col, where overflow-y: auto can actually scroll to it. */
+.aa-stepper { min-width: 0; min-height: 0; }
+.aa-stepper :deep(.v-stepper-window) { overflow: visible; }
+.aa-stepper :deep(.v-window__container) { height: auto !important; }
 .aa-choice-card { flex: 1 1 220px; min-width: 220px; cursor: pointer; }
 
 .aa-grid { width: 100%; border-collapse: collapse; font-size: 0.8em; }
