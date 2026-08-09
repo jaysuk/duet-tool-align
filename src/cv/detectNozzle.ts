@@ -171,10 +171,14 @@ export function detectCircles(cv: CvLike, img: ImageData, opts: DetectOptions = 
 				cv.HoughCircles(blurred, circles, cv.HOUGH_GRADIENT, p.dp, minDist, p.param1, p.param2, minR, maxR);
 				for (let i = 0; i < circles.cols; i++) {
 					const base = i * 3;
+					const r = circles.data32F[base + 2];
+					// See detectorWorker.ts's detectHough -- HOUGH_GRADIENT's minRadius/maxRadius isn't always
+					// a hard filter, so enforce it explicitly.
+					if (r < minR || r > maxR) continue;
 					found.push({
 						x: circles.data32F[base],
 						y: circles.data32F[base + 1],
-						r: circles.data32F[base + 2],
+						r,
 					});
 				}
 			} finally {

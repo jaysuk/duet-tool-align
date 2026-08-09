@@ -67,7 +67,12 @@ function detectHough(cv, work, scale, p) {
       Math.round(p.minRadius * scale), Math.round(p.maxRadius * scale));
     for (let i = 0; i < c.cols; i++) {
       const b = i * 3;
-      found.push({ x: c.data32F[b] / scale, y: c.data32F[b + 1] / scale, r: c.data32F[b + 2] / scale });
+      const r = c.data32F[b + 2] / scale;
+      // HOUGH_GRADIENT estimates radius in a pass separate from centre detection, so the min/maxRadius
+      // passed above isn't always a hard filter -- occasionally a candidate's estimated radius lands
+      // outside the requested range anyway. Enforce it explicitly so a stray circle can't win the pick.
+      if (r < p.minRadius || r > p.maxRadius) continue;
+      found.push({ x: c.data32F[b] / scale, y: c.data32F[b + 1] / scale, r: r });
     }
   } finally { c.delete(); }
   return found;
