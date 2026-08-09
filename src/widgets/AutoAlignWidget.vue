@@ -37,6 +37,16 @@
       <div class="aa-overlay">
         <div class="aa-cross-h" />
         <div class="aa-cross-v" />
+        <template v-if="showScale && imgScale">
+          <template v-for="r in scaleRingRadii" :key="'scale-' + r">
+            <div class="aa-ring aa-ring-scale" :style="ringStyle(r)!" />
+            <div class="aa-ring-label aa-ring-label-scale" :style="{ top: labelTopPx(r) }">{{ r.toFixed(0) }}px</div>
+          </template>
+          <div class="aa-ring aa-ring-min" :style="ringStyle(cfg.minRadiusPx)!" />
+          <div class="aa-ring-label aa-ring-label-min" :style="{ top: labelTopPx(cfg.minRadiusPx) }">min {{ cfg.minRadiusPx }}px</div>
+          <div class="aa-ring aa-ring-max" :style="ringStyle(cfg.maxRadiusPx)!" />
+          <div class="aa-ring-label aa-ring-label-max" :style="{ top: labelTopPx(cfg.maxRadiusPx) }">max {{ cfg.maxRadiusPx }}px</div>
+        </template>
         <div v-if="detectionStyle" class="aa-circle" :style="detectionStyle" />
       </div>
     </div>
@@ -80,6 +90,13 @@
                  prepend-icon="mdi-eye" :disabled="busy || !cfg.bridgeUrl" @click="toggleDetect">
             {{ detecting ? $t("plugins.duetToolAlign.actions.stopDetect") : $t("plugins.duetToolAlign.actions.detect") }}
           </v-btn>
+        </template>
+      </v-tooltip>
+      <v-tooltip location="top" max-width="260"
+                 text="Show a pixel ruler over the camera image (rings every so many px, plus the current Min/Max radius settings) -- to estimate how many pixels wide something is.">
+        <template #activator="{ props }">
+          <v-btn v-bind="props" size="small" :variant="showScale ? 'flat' : 'tonal'" :color="showScale ? 'primary' : undefined"
+                 icon="mdi-ruler" :disabled="!cfg.bridgeUrl" @click="showScale = !showScale" />
         </template>
       </v-tooltip>
       <v-spacer />
@@ -471,12 +488,20 @@ const imgEl = ref<HTMLImageElement | null>(null);
 // Map the detected circle (in original frame pixels) onto the displayed <img>, accounting for the
 // letterbox (object-fit: contain) so the marker sits exactly on what was detected and is drawn at the
 // real detected radius. Recomputes each detection (lastDetection/lastRadius change).
+// Displayed-px-per-frame-px. Shared by the detection marker and the pixel-scale rings below so both
+// use the same source of truth for the letterbox (object-fit: contain) scaling.
+const imgScale = computed(() => {
+  const img = imgEl.value;
+  if (!img || !frameW.value || !img.clientWidth) return null;
+  const s = img.clientWidth / frameW.value;
+  return isFinite(s) && s > 0 ? s : null;
+});
+
 const detectionStyle = computed(() => {
   const d = lastDetection.value;
   const img = imgEl.value;
-  if (!d || !img || !frameW.value || !img.clientWidth) return null;
-  const scale = img.clientWidth / frameW.value;
-  if (!isFinite(scale) || scale <= 0) return null;
+  const scale = imgScale.value;
+  if (!d || !img || !scale) return null;
   const diam = Math.max(8, 2 * lastRadius.value * scale);
   return {
     left: `${img.offsetLeft + d.x * scale}px`,
@@ -485,6 +510,42 @@ const detectionStyle = computed(() => {
     height: `${diam}px`,
   };
 });
+
+// --- Pixel scale overlay: "how many pixels wide is that?" for setting Min/Max radius etc. ----------
+// Toggled on demand (not always-on) so it doesn't clutter the view once you're done tuning.
+const showScale = ref(false);
+// Round a radius up to a "nice" 1/2/5-times-a-power-of-10 step, same technique chart libraries use for
+// axis ticks, so ring labels read as round numbers (20/50/100px) rather than arbitrary fractions.
+function niceStep(raw: number): number {
+  if (!(raw > 0)) return 10;
+  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / pow;
+  const nice = norm < 1.5 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10;
+  return nice * pow;
+}
+// Neutral measurement rings (original-frame px), centred on the crosshair, spaced ~4 across the
+// shorter frame dimension so they stay readable rather than crowding the image.
+const scaleRingRadii = computed(() => {
+  if (!showScale.value || !frameW.value || !frameH.value) return [];
+  const maxR = Math.min(frameW.value, frameH.value) / 2;
+  const step = niceStep(maxR / 4);
+  const rings: Array<number> = [];
+  for (let r = step; r <= maxR; r += step) rings.push(r);
+  return rings;
+});
+// A ring's inline style: diameter in displayed px, centred via the shared aa-ring CSS (transform).
+function ringStyle(radiusPx: number): Record<string, string> | null {
+  const scale = imgScale.value;
+  if (!scale) return null;
+  const d = radiusPx * 2 * scale;
+  return { width: `${d}px`, height: `${d}px` };
+}
+// Top of a ring's label: the container's vertical centre minus the ring's displayed radius minus a
+// small gap, so the label (anchored by its own bottom edge via CSS transform) sits just above the ring.
+function labelTopPx(radiusPx: number): string {
+  const scale = imgScale.value ?? 0;
+  return `calc(50% - ${radiusPx * scale}px - 4px)`;
+}
 
 // --- Status --------------------------------------------------------------------
 const statusText = ref(i18n.global.t("plugins.duetToolAlign.cv.notReady"));
@@ -984,6 +1045,19 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
 .aa-cross-v { position: absolute; top: 0; bottom: 0; left: 50%; border-left: 1px solid #39ff14; }
 /* width/height/left/top come from detectionStyle (the real detected radius, letterbox-corrected). */
 .aa-circle { position: absolute; transform: translate(-50%, -50%); border: 2px solid #ff3b30; border-radius: 50%; box-shadow: 0 0 4px #ff3b30; }
+
+/* Pixel scale overlay (toggled via showScale): width/height come from ringStyle(), centred on the
+   crosshair like aa-circle. Neutral rings are a measuring aid; min/max are the live Detection settings. */
+.aa-ring { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border-radius: 50%; box-sizing: border-box; }
+.aa-ring-scale { border: 1px dashed rgba(255, 255, 255, 0.4); }
+.aa-ring-min { border: 1px dashed #00e5ff; }
+.aa-ring-max { border: 1px dashed #ffb300; }
+/* top comes from labelTopPx(); anchored by its own bottom edge so it sits just above the ring. */
+.aa-ring-label { position: absolute; left: 50%; transform: translate(-50%, -100%); font-size: 10px; line-height: 1.4;
+  white-space: nowrap; padding: 0 3px; border-radius: 2px; background: rgba(0, 0, 0, 0.55); }
+.aa-ring-label-scale { color: rgba(255, 255, 255, 0.75); }
+.aa-ring-label-min { color: #00e5ff; }
+.aa-ring-label-max { color: #ffb300; }
 
 .aa-status-info { color: rgba(127, 127, 127, 0.95); }
 .aa-status-ok { color: #2e7d32; }
