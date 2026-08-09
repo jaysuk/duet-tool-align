@@ -43,10 +43,10 @@
             <div class="aa-ring aa-ring-scale" :style="ringStyle(r)!" />
             <div class="aa-ring-label aa-ring-label-scale" :style="{ top: labelTopPx(r) }">{{ r.toFixed(0) }}px</div>
           </template>
-          <div class="aa-ring aa-ring-min" :style="ringStyle(cfg.minRadiusPx)!" />
-          <div class="aa-ring-label aa-ring-label-min" :style="{ top: labelTopPx(cfg.minRadiusPx) }">min {{ cfg.minRadiusPx }}px</div>
-          <div class="aa-ring aa-ring-max" :style="ringStyle(cfg.maxRadiusPx)!" />
-          <div class="aa-ring-label aa-ring-label-max" :style="{ top: labelTopPx(cfg.maxRadiusPx) }">max {{ cfg.maxRadiusPx }}px</div>
+          <div class="aa-ring aa-ring-min" :style="ringStyle(previewSettings.minRadiusPx)!" />
+          <div class="aa-ring-label aa-ring-label-min" :style="{ top: labelTopPx(previewSettings.minRadiusPx) }">min {{ previewSettings.minRadiusPx }}px</div>
+          <div class="aa-ring aa-ring-max" :style="ringStyle(previewSettings.maxRadiusPx)!" />
+          <div class="aa-ring-label aa-ring-label-max" :style="{ top: labelTopPx(previewSettings.maxRadiusPx) }">max {{ previewSettings.maxRadiusPx }}px</div>
         </template>
         <div v-if="detectionStyle" class="aa-circle" :style="detectionStyle" />
         <svg v-if="measureADisp && measureBDisp" class="aa-measure-svg">
@@ -94,7 +94,7 @@
 
     <!-- Live detection (no motion — needs only the camera) + Z focus -->
     <div class="aa-focus d-flex flex-wrap align-center ga-1 px-1 pt-1 flex-shrink-0">
-      <v-tooltip location="top" text="Continuously detect the nozzle without moving anything -- use this to tune the Detection settings below against the live image.">
+      <v-tooltip location="top" text="Continuously detect without moving anything, using whichever profile is selected in Settings → Detection (Global by default) -- use this to tune settings against the live image, including for a tool/datum that isn't currently loaded.">
         <template #activator="{ props }">
           <v-btn v-bind="props" size="small" :variant="detecting ? 'flat' : 'tonal'" :color="detecting ? 'primary' : undefined"
                  prepend-icon="mdi-eye" :disabled="busy || !cfg.bridgeUrl" @click="toggleDetect">
@@ -797,7 +797,10 @@ async function toggleDetect(): Promise<void> {
   bestSharpness.value = 0; // fresh focusing session -- don't compare against a stale peak
   lastSharpness.value = null;
   while (detecting.value && !aborted) {
-    const p = await detectOnce();
+    // Follow whichever profile is browsed in Settings (Global by default), not necessarily the loaded
+    // tool -- this loop exists purely to preview tuning, including for profiles like the carriage datum
+    // that are never "loaded" at all.
+    const p = await detectOnce(editingProfileKey.value);
     if (p) {
       setStatus(i18n.global.t("plugins.duetToolAlign.detect.found", { x: p.x.toFixed(0), y: p.y.toFixed(0), r: lastRadius.value.toFixed(0) }), "ok");
     } else if (cvReady.value) {
@@ -1146,6 +1149,12 @@ const profileOptions = computed(() => [
   ...tools.value.map((t) => ({ title: t.name || `T${t.number}`, value: String(t.number) })),
   { title: i18n.global.t("plugins.duetToolAlign.settings.profileDatum"), value: "datum" },
 ]);
+// Effective settings for whichever profile is browsed above -- drives both the min/max-radius rings
+// and the "Detect" preview loop below, so tuning a tool/datum profile that ISN'T currently loaded (e.g.
+// the carriage datum, which is never "loaded") still previews with ITS settings, not Global's. Actual
+// alignment motion (centreCurrent/runFull/doCalibrate) is unaffected -- those always resolve against
+// the loaded tool via detectOnce()'s own default (liveProfileKey), never this.
+const previewSettings = computed(() => resolveDetectionSettings(editingProfileKey.value));
 // Whether the currently-browsed profile has its own override (vs. just inheriting Global).
 const hasOverride = computed(() => {
   const key = editingProfileKey.value;
