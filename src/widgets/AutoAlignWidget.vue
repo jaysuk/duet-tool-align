@@ -64,10 +64,12 @@
     </div>
 
     <div class="aa-side-col flex-grow-1 d-flex flex-column">
-    <!-- Status line -->
-    <div class="aa-status text-caption px-2 py-1 flex-shrink-0 d-flex align-center" :class="statusClass">
+    <!-- Status + live machine position, one row -- otherwise you're jogging blind unless you're also
+         watching DWC's own status bar elsewhere. -->
+    <div class="aa-status text-caption px-2 py-1 flex-shrink-0 d-flex align-center ga-3" :class="statusClass">
       <v-icon size="14" class="mr-1">{{ statusIcon }}</v-icon><span>{{ statusText }}</span>
       <v-spacer />
+      <span class="aa-num text-medium-emphasis">X {{ fmtPos(livePos.x) }} Y {{ fmtPos(livePos.y) }} Z {{ fmtPos(livePos.z) }}</span>
       <v-tooltip v-if="busy || detecting" location="top" text="Abort the running operation.">
         <template #activator="{ props }">
           <v-btn v-bind="props" size="x-small" color="error" variant="text" prepend-icon="mdi-stop" @click="stop">
@@ -88,7 +90,7 @@
          tool is useful from step 3 (the calibration tool) through step 4 (every subsequent tool), so
          this isn't tied to any one step. Loading a tool here also moves step 4's checklist to follow
          it. Jog/Focus/Detect live inside steps 3 and 4 instead -- keeping only the compact, single-row
-         essentials (status, tool selection, live position) always on screen. -->
+         essentials (status + position, tool selection) always on screen. -->
     <div class="aa-tools d-flex flex-wrap align-center ga-1 px-1 pt-1 flex-shrink-0">
       <v-tooltip v-for="t in tools" :key="t.number" location="top" :text="`Select ${t.name || 'T' + t.number} (sends T${t.number}).`">
         <template #activator="{ props }">
@@ -111,14 +113,6 @@
         </template>
       </v-tooltip>
     </div>
-
-    <!-- Live machine position -- otherwise you're jogging blind unless you're also watching DWC's
-         own status bar elsewhere. -->
-    <div class="aa-pos text-caption text-medium-emphasis px-1 pt-1 flex-shrink-0 d-flex ga-3 aa-num">
-      <span>X {{ fmtPos(livePos.x) }}</span>
-      <span>Y {{ fmtPos(livePos.y) }}</span>
-      <span>Z {{ fmtPos(livePos.z) }}</span>
-    </div>
     <div v-if="!allHomed" class="text-caption text-warning px-2 pt-1 flex-shrink-0 d-flex align-center ga-1">
       <v-icon size="14">mdi-alert</v-icon> <span>{{ $t("plugins.duetToolAlign.notHomed") }}</span>
       <v-spacer />
@@ -134,7 +128,7 @@
     <!-- Guided wizard: connect -> decide the reference origin -> calibrate (+ tune detection, capture
          the datum) -> align each tool in turn -> review and save. editable so any step can be jumped
          to directly, same as Closed Loop Tuning's stepper. -->
-    <v-stepper v-model="step" :items="stepTitles" editable flat class="aa-stepper flex-grow-1">
+    <v-stepper v-model="step" :items="stepTitles" editable flat hide-actions class="aa-stepper flex-grow-1">
       <!-- 1. Camera -->
       <template #item.1>
         <v-card flat>
@@ -1646,7 +1640,17 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
 .aa-focusbar { width: 100%; }
 .aa-focusbar-bar { max-width: 220px; }
 
-.aa-stepper { min-width: 0; }
+/* flex-grow-1 sizes this to "remaining space in aa-side-col", not to its actual content -- without
+   min-height: 0 a flex item's default min-height: auto stops it ever being SMALLER than its content,
+   which fights that sizing in a way that (combined with v-window's own overflow: hidden below) can
+   silently clip a step's content instead of growing aa-side-col's own scroll region to fit it. Vuetify's
+   stepper window clips overflow for its slide transition between steps; that's fine between steps, but
+   it also clips content that grows WITHIN a step (e.g. expanding an Advanced accordion) unless
+   overridden, since the window's own height doesn't renegotiate for that. Forcing it visible/auto lets
+   the step's real content height reach aa-side-col, where overflow-y: auto can actually scroll to it. */
+.aa-stepper { min-width: 0; min-height: 0; }
+.aa-stepper :deep(.v-stepper-window) { overflow: visible; }
+.aa-stepper :deep(.v-window__container) { height: auto !important; }
 .aa-choice-card { flex: 1 1 220px; min-width: 220px; cursor: pointer; }
 
 .aa-grid { width: 100%; border-collapse: collapse; font-size: 0.8em; }
