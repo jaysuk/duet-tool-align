@@ -17,6 +17,28 @@ import { useSettingsStore } from "@/stores/settings";
 
 import { PLUGIN_ID } from "./constants";
 
+/**
+ * The subset of Detection fields that can be overridden per tool (or the carriage datum) -- nozzle
+ * size/finish, and therefore what detects it well, can genuinely differ between tools. Kept as its own
+ * type so DetectionSettings and the equivalent fields on AutoAlignConfig (the global/default values)
+ * can't drift apart.
+ */
+export interface DetectionSettings {
+	minRadiusPx: number;
+	maxRadiusPx: number;
+	detector: "hough" | "contour";
+	threshold: number;
+	minCircularity: number;
+	darkBore: boolean;
+	houghDp: number;
+	houghParam1: number;
+	houghParam2: number;
+	houghMinDist: number;
+	blurKsize: number;
+	detectWidth: number;
+	pickLargest: boolean;
+}
+
 export interface AutoAlignConfig {
 	/** Camera stream/snapshot base URL (the duet-webcam-bridge), e.g. http://192.168.1.50:8081 */
 	bridgeUrl: string;
@@ -94,6 +116,14 @@ export interface AutoAlignConfig {
 	 *  nozzle is deliberately off-centre during tuning; centring works better with "nearest". */
 	pickLargest: boolean;
 
+	/** Per-tool (keyed by tool number as a string, e.g. "2") or carriage-datum ("datum") overrides for
+	 *  any subset of the DetectionSettings fields above. A missing key (or a profile with no entry for
+	 *  it) falls back to the corresponding global field. Only the profile for whichever tool is
+	 *  currently selected is used for live detection at any given moment -- the datum slot exists for
+	 *  consistency but isn't consumed by anything today, since capturing it is a direct position read,
+	 *  not camera detection. */
+	detectProfiles: Record<string, Partial<DetectionSettings>>;
+
 	/** Z focus jog step, in mm (the -Z/+Z buttons that sharpen the image). */
 	zStep: number;
 	/** X/Y manual jog step, in mm (the X/Y jog buttons for bringing a tool into frame). */
@@ -139,6 +169,7 @@ export function defaultConfig(): AutoAlignConfig {
 		blurKsize: 5,
 		detectWidth: 800,
 		pickLargest: false,
+		detectProfiles: {},
 		zStep: 0.05,
 		xyStep: 0.1,
 		startCommand: "",

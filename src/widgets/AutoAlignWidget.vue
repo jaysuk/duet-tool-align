@@ -363,34 +363,47 @@
           <div class="d-flex align-center mt-2 mb-1">
             <div class="text-caption text-medium-emphasis">{{ $t("plugins.duetToolAlign.settings.detectionHeading") }}</div>
             <v-spacer />
-            <v-tooltip location="top" text="Reset every Detection setting below back to its default value.">
+            <v-tooltip location="top" text="Reset every Detection setting below (for whichever profile is selected above) back to its default value.">
               <template #activator="{ props }">
-                <v-btn v-bind="props" size="x-small" variant="text" prepend-icon="mdi-restore" @click="resetDetectionDefaults">
+                <v-btn v-bind="props" size="x-small" variant="text" prepend-icon="mdi-restore" :disabled="editingLocked" @click="resetDetectionDefaults">
                   {{ $t("plugins.duetToolAlign.settings.resetDetection") }}
                 </v-btn>
               </template>
             </v-tooltip>
           </div>
           <div class="d-flex ga-2 flex-wrap align-center mb-2">
-            <v-select v-model="cfg.detector" :items="detectorItems" item-title="title" item-value="value"
+            <v-select v-model="editingProfileKey" :items="profileOptions" item-title="title" item-value="value"
                       density="compact" variant="outlined" hide-details class="aa-select"
+                      :label="$t('plugins.duetToolAlign.settings.profile')">
+              <template #append-inner><HelpTip text="Detection settings below apply to whichever tool is actually loaded, using that tool's own overrides if it has any. Pick a tool (or the carriage datum) here to view or tune its overrides without affecting other tools. (default: Global)" /></template>
+            </v-select>
+            <v-tooltip v-if="editingProfileKey" location="top" max-width="300" text="Give this profile its own Detection settings, starting from the current Global values. Untick to delete the override and go back to following Global.">
+              <template #activator="{ props }">
+                <v-switch v-bind="props" :model-value="hasOverride" density="compact" hide-details color="primary"
+                          :label="$t('plugins.duetToolAlign.settings.useCustom')" @update:model-value="toggleOverride" />
+              </template>
+            </v-tooltip>
+          </div>
+          <div class="d-flex ga-2 flex-wrap align-center mb-2">
+            <v-select v-model="activeDetector" :items="detectorItems" item-title="title" item-value="value"
+                      density="compact" variant="outlined" hide-details class="aa-select" :disabled="editingLocked"
                       :label="$t('plugins.duetToolAlign.settings.detector')" />
             <v-tooltip location="top" max-width="300" text="Pick the largest detected circle instead of the one nearest the crosshair. Handy while the nozzle is off-centre during tuning; turn off for centring. (default: off)">
               <template #activator="{ props }">
-                <v-switch v-bind="props" v-model="cfg.pickLargest" density="compact" hide-details color="primary"
+                <v-switch v-bind="props" v-model="activePickLargest" density="compact" hide-details color="primary" :disabled="editingLocked"
                           :label="$t('plugins.duetToolAlign.settings.pickLargest')" />
               </template>
             </v-tooltip>
-            <v-tooltip v-if="cfg.detector === 'contour'" location="top" max-width="300" text="The bore is darker than the nozzle, so threshold keeps the dark pixels. Turn off only if your target is brighter than its surroundings. (default: on)">
+            <v-tooltip v-if="activeDetector === 'contour'" location="top" max-width="300" text="The bore is darker than the nozzle, so threshold keeps the dark pixels. Turn off only if your target is brighter than its surroundings. (default: on)">
               <template #activator="{ props }">
-                <v-switch v-bind="props" v-model="cfg.darkBore" density="compact" hide-details color="primary"
+                <v-switch v-bind="props" v-model="activeDarkBore" density="compact" hide-details color="primary" :disabled="editingLocked"
                           :label="$t('plugins.duetToolAlign.settings.darkBore')" />
               </template>
             </v-tooltip>
           </div>
           <div class="d-flex ga-2 flex-wrap align-center">
-            <v-text-field v-for="f in activeDetectFields" :key="f.key" :model-value="getNum(f.key)" @update:model-value="setNum(f.key, $event)"
-                          type="number" :min="f.min" :max="f.max" :step="f.step ?? 1" :suffix="f.unit"
+            <v-text-field v-for="f in activeDetectFields" :key="f.key" :model-value="getDetectNum(f.key)" @update:model-value="setDetectNum(f.key, $event)"
+                          type="number" :min="f.min" :max="f.max" :step="f.step ?? 1" :suffix="f.unit" :disabled="editingLocked"
                           density="compact" variant="outlined" hide-details class="aa-field"
                           :label="$t('plugins.duetToolAlign.settings.' + f.key)">
               <template #append-inner><HelpTip :text="fieldTip(f)" /></template>
@@ -415,7 +428,7 @@ import { LogLevel, useUiStore } from "@/stores/ui";
 
 import { type AxisCapture, computeToolOffset, formatG10, type ToolOffset } from "../util/toolAlign";
 import { resolveOmPath } from "../util/omPath";
-import { type AutoAlignConfig, defaultConfig, resolveOpencvUrl, useConfig } from "../model/document";
+import { type AutoAlignConfig, type DetectionSettings, defaultConfig, resolveOpencvUrl, useConfig } from "../model/document";
 import { type DetectParams, pickLargest, pickNearestToCentre } from "../cv/detectNozzle";
 import { WorkerDetector } from "../cv/detectorWorker";
 import { grabFrame } from "../cv/frameGrabber";
@@ -677,22 +690,45 @@ const machineIO: MachineIO = {
   machinePos,
 };
 
-// Build the detector params from the live config, so tuning in Settings takes effect immediately
-// (including during the live Detect loop).
-function detectParams(): DetectParams {
+// The Detection fields that can be overridden per tool/datum (see DetectionSettings in document.ts).
+// Single source of truth for the key list, shared by live resolution, override-creation, and reset.
+const DETECTION_KEYS: ReadonlyArray<keyof DetectionSettings> = [
+  "detector", "pickLargest", "darkBore",
+  "minRadiusPx", "maxRadiusPx", "blurKsize", "detectWidth",
+  "houghDp", "houghParam1", "houghParam2", "houghMinDist",
+  "threshold", "minCircularity",
+];
+
+// Resolve effective Detection settings for a profile key: global values with any per-key overrides
+// from cfg.detectProfiles[profileKey] layered on top. null key (Global) or a key with no override yet
+// just returns the global values.
+function resolveDetectionSettings(profileKey: string | null): DetectionSettings {
+  const base = {} as Record<string, unknown>;
+  for (const k of DETECTION_KEYS) base[k] = (cfg as unknown as Record<string, unknown>)[k];
+  const override = profileKey ? cfg.detectProfiles[profileKey] : undefined;
+  return (override ? { ...base, ...override } : base) as unknown as DetectionSettings;
+}
+
+// The profile that actually drives live detection: whichever tool is currently loaded on the machine
+// (not the settings panel's independently-browsable editingProfileKey below).
+const liveProfileKey = computed(() => (current.value >= 0 ? String(current.value) : null));
+
+// Build the detector params from the resolved (global + per-tool override) settings, so tuning in
+// Settings -- global or a profile for the loaded tool -- takes effect immediately in the live Detect loop.
+function detectParams(s: DetectionSettings): DetectParams {
   return {
-    method: cfg.detector,
-    minRadius: cfg.minRadiusPx,
-    maxRadius: cfg.maxRadiusPx,
-    blur: cfg.blurKsize,
-    detectWidth: cfg.detectWidth,
-    dp: cfg.houghDp,
-    param1: cfg.houghParam1,
-    param2: cfg.houghParam2,
-    minDist: cfg.houghMinDist,
-    threshold: cfg.threshold,
-    minCircularity: cfg.minCircularity,
-    darkBore: cfg.darkBore,
+    method: s.detector,
+    minRadius: s.minRadiusPx,
+    maxRadius: s.maxRadiusPx,
+    blur: s.blurKsize,
+    detectWidth: s.detectWidth,
+    dp: s.houghDp,
+    param1: s.houghParam1,
+    param2: s.houghParam2,
+    minDist: s.houghMinDist,
+    threshold: s.threshold,
+    minCircularity: s.minCircularity,
+    darkBore: s.darkBore,
   };
 }
 
@@ -703,14 +739,15 @@ async function detectOnce(): Promise<Vec2 | null> {
     frameW.value = img.width;
     frameH.value = img.height;
     const centre = { x: img.width / 2, y: img.height / 2 };
+    const settings = resolveDetectionSettings(liveProfileKey.value);
     // detect() transfers the pixel buffer to the worker, so read dimensions/centre first.
-    const res = await detector.detect(img, detectParams());
+    const res = await detector.detect(img, detectParams(settings));
     if (detector.lastError) setStatus(i18n.global.t("plugins.duetToolAlign.detect.error", { msg: detector.lastError }), "error");
     // Update focus-assist regardless of whether a circle was found -- a too-blurry-to-detect frame is
     // exactly when this is most useful.
     lastSharpness.value = res.sharpness;
     bestSharpness.value = Math.max(bestSharpness.value, res.sharpness);
-    const c = cfg.pickLargest ? pickLargest(res.circles) : pickNearestToCentre(res.circles, centre);
+    const c = settings.pickLargest ? pickLargest(res.circles) : pickNearestToCentre(res.circles, centre);
     if (!c) { smoothBuf.length = 0; lastDetection.value = null; lastRadius.value = 0; return null; }
     const raw = { x: c.x, y: c.y };
     // Median-smooth the DISPLAYED marker so a jumpy lock reads steadily. The raw point is what we
@@ -1037,9 +1074,6 @@ const contourFields: Array<NumField> = [
   { key: "threshold", min: 0, max: 255, step: 1, tip: "Brightness cut (0–255) separating the bore from the nozzle. 0 = auto (Otsu), which usually works. Set manually if lighting is uneven." },
   { key: "minCircularity", min: 0, max: 1, step: 0.05, tip: "How round a blob must be to count (4π·area/perimeter²). Higher rejects irregular shapes; lower is more forgiving. Typical 0.5–0.8." },
 ];
-// Fields shown for the currently-selected detector.
-const activeDetectFields = computed(() =>
-  cfg.detector === "hough" ? [...commonFields, ...houghFields] : [...commonFields, ...contourFields]);
 const detectorItems = [
   { title: i18n.global.t("plugins.duetToolAlign.settings.methodHough"), value: "hough" },
   { title: i18n.global.t("plugins.duetToolAlign.settings.methodContour"), value: "contour" },
@@ -1057,23 +1091,72 @@ function fieldTip(f: NumField): string {
   return `${f.tip} (default: ${DEFAULTS[f.key]})`;
 }
 
-// Reset just the Detection section (detector choice + every tuning field) -- not Alignment & motion,
-// bridge URL, etc. -- back to built-in defaults, e.g. after tuning knobs into a bad state.
+// --- Per-tool / carriage-datum Detection profiles -----------------------------
+// The Settings panel lets you browse and tune a profile for any tool (or the carriage datum)
+// independently of which tool is actually loaded -- that's editingProfileKey. It's unrelated to
+// liveProfileKey above, which always follows whatever tool the machine actually has loaded.
+const editingProfileKey = ref<string | null>(null); // null = Global (default)
+const profileOptions = computed(() => [
+  { title: i18n.global.t("plugins.duetToolAlign.settings.profileGlobal"), value: null },
+  ...tools.value.map((t) => ({ title: t.name || `T${t.number}`, value: String(t.number) })),
+  { title: i18n.global.t("plugins.duetToolAlign.settings.profileDatum"), value: "datum" },
+]);
+// Whether the currently-browsed profile has its own override (vs. just inheriting Global).
+const hasOverride = computed(() => {
+  const key = editingProfileKey.value;
+  return key != null && !!cfg.detectProfiles[key];
+});
+// Create an override for the browsed profile (snapshotting the current Global values as its starting
+// point) or delete it to revert that profile back to following Global.
+function toggleOverride(): void {
+  const key = editingProfileKey.value;
+  if (!key) return;
+  if (cfg.detectProfiles[key]) {
+    delete cfg.detectProfiles[key];
+  } else {
+    const snapshot = {} as Record<string, unknown>;
+    for (const k of DETECTION_KEYS) snapshot[k] = (cfg as unknown as Record<string, unknown>)[k];
+    cfg.detectProfiles[key] = snapshot as Partial<DetectionSettings>;
+  }
+}
+// Where Detection field reads/writes go: the browsed profile's override object once it has one,
+// otherwise the global cfg (same as before this feature existed, and how Global itself always behaves).
+function activeStore(): Record<string, unknown> {
+  const key = editingProfileKey.value;
+  const override = key ? cfg.detectProfiles[key] : undefined;
+  return (override ?? cfg) as unknown as Record<string, unknown>;
+}
+// Fields are read-only previews of Global until "use custom settings" creates an override to edit.
+const editingLocked = computed(() => editingProfileKey.value != null && !hasOverride.value);
+function getDetectNum(key: string): number {
+  return activeStore()[key] as number;
+}
+function setDetectNum(key: string, val: unknown): void {
+  activeStore()[key] = val === "" || val === null || val === undefined ? 0 : Number(val);
+}
+const activeDetector = computed<"hough" | "contour">({
+  get: () => (activeStore().detector as "hough" | "contour" | undefined) ?? cfg.detector,
+  set: (v) => { activeStore().detector = v; },
+});
+const activePickLargest = computed<boolean>({
+  get: () => (activeStore().pickLargest as boolean | undefined) ?? cfg.pickLargest,
+  set: (v) => { activeStore().pickLargest = v; },
+});
+const activeDarkBore = computed<boolean>({
+  get: () => (activeStore().darkBore as boolean | undefined) ?? cfg.darkBore,
+  set: (v) => { activeStore().darkBore = v; },
+});
+// Fields shown for the currently-browsed profile's detector.
+const activeDetectFields = computed(() =>
+  activeDetector.value === "hough" ? [...commonFields, ...houghFields] : [...commonFields, ...contourFields]);
+
+// Reset the browsed profile's Detection settings (detector choice + every tuning field) back to
+// built-in defaults -- Global if browsing Global, or the override object if browsing a tool/datum
+// profile that has one. Doesn't touch Alignment & motion, bridge URL, etc.
 function resetDetectionDefaults(): void {
-  const d = defaultConfig();
-  cfg.detector = d.detector;
-  cfg.pickLargest = d.pickLargest;
-  cfg.darkBore = d.darkBore;
-  cfg.minRadiusPx = d.minRadiusPx;
-  cfg.maxRadiusPx = d.maxRadiusPx;
-  cfg.blurKsize = d.blurKsize;
-  cfg.detectWidth = d.detectWidth;
-  cfg.houghDp = d.houghDp;
-  cfg.houghParam1 = d.houghParam1;
-  cfg.houghParam2 = d.houghParam2;
-  cfg.houghMinDist = d.houghMinDist;
-  cfg.threshold = d.threshold;
-  cfg.minCircularity = d.minCircularity;
+  const d = defaultConfig() as unknown as Record<string, unknown>;
+  const target = activeStore();
+  for (const k of DETECTION_KEYS) target[k] = d[k];
   notify(i18n.global.t("plugins.duetToolAlign.settings.resetDetectionDone"), LogLevel.success);
 }
 
