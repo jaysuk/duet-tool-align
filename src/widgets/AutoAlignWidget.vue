@@ -200,7 +200,7 @@
               <template #append-inner><HelpTip text="How the 0,0 origin is defined. Reference tool: a tool (e.g. T0) is the origin, others are relative to it. Carriage datum: a fixed point on the carriage (e.g. the E3D toolchanger switch) is the origin — capture it once and every tool is offset from it. (default: Reference tool)" /></template>
             </v-select>
             <v-text-field v-for="f in alignFields" :key="f.key" :model-value="getNum(f.key)" @update:model-value="setNum(f.key, $event)"
-                          type="number" :min="f.min" :max="f.max" :step="f.step ?? 1"
+                          type="number" :min="f.min" :max="f.max" :step="f.step ?? 1" :suffix="f.unit"
                           density="compact" variant="outlined" hide-details class="aa-field"
                           :label="$t('plugins.duetToolAlign.settings.' + f.key)">
               <template #append-inner><HelpTip :text="fieldTip(f)" /></template>
@@ -233,7 +233,7 @@
           </div>
           <div class="d-flex ga-2 flex-wrap align-center">
             <v-text-field v-for="f in activeDetectFields" :key="f.key" :model-value="getNum(f.key)" @update:model-value="setNum(f.key, $event)"
-                          type="number" :min="f.min" :max="f.max" :step="f.step ?? 1"
+                          type="number" :min="f.min" :max="f.max" :step="f.step ?? 1" :suffix="f.unit"
                           density="compact" variant="outlined" hide-details class="aa-field"
                           :label="$t('plugins.duetToolAlign.settings.' + f.key)">
               <template #append-inner><HelpTip :text="fieldTip(f)" /></template>
@@ -712,32 +712,36 @@ function confirmApply(cmds: Array<string>): Promise<boolean> {
 }
 
 // --- Settings metadata (drives the Settings fields with tooltips + ranges) ---
-interface NumField { key: string; min?: number; max?: number; step?: number; tip: string }
+// `unit`, when set, is shown as a compact field suffix instead of being spelled out in the label --
+// labels are floating and the fields are narrow (half the panel width, see .aa-field), so keeping
+// them to a word or two is what stops them being clipped. Full context (units included) is always
+// in the tooltip via fieldTip().
+interface NumField { key: string; min?: number; max?: number; step?: number; tip: string; unit?: string }
 const alignFields: Array<NumField> = [
   { key: "referenceTool", min: 0, step: 1, tip: "Tool number used as the origin that all other tools' offsets are measured against. Usually 0." },
-  { key: "calibStepMm", min: 0.05, max: 5, step: 0.05, tip: "Half-size of the calibration jog star (mm). Big enough to move the nozzle a clear distance in view, small enough to stay in frame. Typical 0.3–1.0." },
-  { key: "tolerancePx", min: 0.5, max: 15, step: 0.5, tip: "How close (px) repeated detections must agree to count as locked, and how near the crosshair counts as centred. Raise if the lock is jumpy; lower for more precision. Typical 1–4." },
-  { key: "smoothing", min: 1, max: 15, step: 1, tip: "Frames median-averaged for the on-screen marker, to steady a jumpy lock. 1 = off. Display only — does not affect captured positions. Typical 3–7." },
+  { key: "calibStepMm", min: 0.05, max: 5, step: 0.05, unit: "mm", tip: "Half-size of the calibration jog star (mm). Big enough to move the nozzle a clear distance in view, small enough to stay in frame. Typical 0.3–1.0." },
+  { key: "tolerancePx", min: 0.5, max: 15, step: 0.5, unit: "px", tip: "How close (px) repeated detections must agree to count as locked, and how near the crosshair counts as centred. Raise if the lock is jumpy; lower for more precision. Typical 1–4." },
+  { key: "smoothing", min: 1, max: 15, step: 1, unit: "frames", tip: "Frames median-averaged for the on-screen marker, to steady a jumpy lock. 1 = off. Display only — does not affect captured positions. Typical 3–7." },
   { key: "gain", min: 0.1, max: 1.5, step: 0.05, tip: "Fraction of each computed correction applied per centring step. Lower = slower but stable; higher = faster but can overshoot. Typical 0.5–0.9." },
-  { key: "maxStepMm", min: 0.1, max: 10, step: 0.1, tip: "Clamp on a single centring jog (mm), so a bad detection can't fling the toolhead. Typical 0.5–3." },
+  { key: "maxStepMm", min: 0.1, max: 10, step: 0.1, unit: "mm", tip: "Clamp on a single centring jog (mm), so a bad detection can't fling the toolhead. Typical 0.5–3." },
   { key: "maxIterations", min: 5, max: 100, step: 1, tip: "Maximum centring jogs before giving up on a tool. Typical 15–40." },
-  { key: "settleMs", min: 0, max: 3000, step: 50, tip: "Pause after each move before grabbing a frame, letting vibration/ooze settle (ms). Typical 200–800." },
-  { key: "travelFeed", min: 100, max: 30000, step: 100, tip: "Feed rate (mm/min) for travel moves to the camera position. e.g. 6000." },
-  { key: "jogFeed", min: 60, max: 12000, step: 60, tip: "Feed rate (mm/min) for small calibration/centring/Z-focus jogs. e.g. 1200." },
+  { key: "settleMs", min: 0, max: 3000, step: 50, unit: "ms", tip: "Pause after each move before grabbing a frame, letting vibration/ooze settle (ms). Typical 200–800." },
+  { key: "travelFeed", min: 100, max: 30000, step: 100, unit: "mm/min", tip: "Feed rate (mm/min) for travel moves to the camera position. e.g. 6000." },
+  { key: "jogFeed", min: 60, max: 12000, step: 60, unit: "mm/min", tip: "Feed rate (mm/min) for small calibration/centring/Z-focus jogs. e.g. 1200." },
 ];
 // Common to both detectors.
 const commonFields: Array<NumField> = [
-  { key: "minRadiusPx", min: 1, max: 1000, step: 1, tip: "Smallest circle radius accepted (original-frame px). Raise to reject small specks / the inner dark dot. Watch the r= readout." },
-  { key: "maxRadiusPx", min: 1, max: 2000, step: 1, tip: "Largest circle radius accepted (original-frame px). Must be above the bore radius or the bore won't be found. Watch the r= readout." },
+  { key: "minRadiusPx", min: 1, max: 1000, step: 1, unit: "px", tip: "Smallest circle radius accepted (original-frame px). Raise to reject small specks / the inner dark dot. Watch the r= readout." },
+  { key: "maxRadiusPx", min: 1, max: 2000, step: 1, unit: "px", tip: "Largest circle radius accepted (original-frame px). Must be above the bore radius or the bore won't be found. Watch the r= readout." },
   { key: "blurKsize", min: 0, max: 21, step: 2, tip: "Median blur kernel (odd number) applied before detection to suppress speckle/glitter. 0 or 1 = off. Typical 3–9." },
-  { key: "detectWidth", min: 160, max: 2000, step: 20, tip: "Frame is downscaled to this width for detection speed (coords scaled back). Lower = faster, less precise. Typical 480–1000." },
+  { key: "detectWidth", min: 160, max: 2000, step: 20, unit: "px", tip: "Frame is downscaled to this width for detection speed (coords scaled back). Lower = faster, less precise. Typical 480–1000." },
 ];
 // Hough-only.
 const houghFields: Array<NumField> = [
   { key: "houghParam2", min: 1, max: 300, step: 1, tip: "Detection sensitivity (Hough accumulator threshold). LOWER finds more circles (and more false ones); higher is stricter. The main knob. Typical 20–80." },
   { key: "houghParam1", min: 10, max: 400, step: 5, tip: "Edge sensitivity (Canny high threshold). Higher = only strong edges, ignoring faint surface texture. Typical 80–200." },
   { key: "houghDp", min: 1, max: 3, step: 0.1, tip: "Accumulator resolution (inverse). 1 = full detail; 1.5–2 finds rougher/blurrier circles, less accurately. Typical 1–2." },
-  { key: "houghMinDist", min: 0, max: 2000, step: 5, tip: "Minimum distance between detected circle centres (px). 0 = auto (frame/8). Raise to avoid several overlapping detections." },
+  { key: "houghMinDist", min: 0, max: 2000, step: 5, unit: "px", tip: "Minimum distance between detected circle centres (px). 0 = auto (frame/8). Raise to avoid several overlapping detections." },
 ];
 // Contour-only.
 const contourFields: Array<NumField> = [
@@ -838,7 +842,10 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
 
 .aa-btn { min-width: 0; }
 .aa-narrow { max-width: 120px; }
-.aa-field { max-width: 160px; }
+/* A little wider than before (was 160px): labels are now short (unit moved to the field's own
+   suffix, see NumField.unit), but a value + suffix together (e.g. "30000" + "mm/min") still wants
+   more room than a bare value did. */
+.aa-field { max-width: 180px; }
 .aa-select { max-width: 200px; }
 
 .aa-table { min-height: 0; overflow: auto; }
