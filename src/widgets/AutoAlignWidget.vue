@@ -102,6 +102,20 @@
       </v-tooltip>
     </div>
 
+    <!-- Focus assist: sharpness of the last detected frame, relative to the best seen since Detect was
+         (re)started. Jog Z, watch it climb toward 100% -- back off once it starts dropping again. Only
+         meaningful once Detect has produced at least one reading. -->
+    <v-tooltip v-if="lastSharpness != null" location="top"
+               text="Focus assist: how sharp the last frame was, relative to the best seen since Detect was (re)started. Jog Z to climb toward 100%; it resets each time you start Detect.">
+      <template #activator="{ props }">
+        <div v-bind="props" class="aa-focusbar d-flex align-center ga-2 px-1 pt-1 flex-shrink-0">
+          <span class="text-caption text-medium-emphasis">{{ $t("plugins.duetToolAlign.focus.assist") }}</span>
+          <v-progress-linear :model-value="focusPct" height="6" rounded color="primary" class="aa-focusbar-bar" />
+          <span class="text-caption text-medium-emphasis aa-num">{{ focusPct.toFixed(0) }}%</span>
+        </div>
+      </template>
+    </v-tooltip>
+
     <!-- Live machine position -- otherwise you're jogging blind unless you're also watching DWC's
          own status bar elsewhere. -->
     <div class="aa-pos text-caption text-medium-emphasis px-1 pt-1 flex-shrink-0 d-flex ga-3 aa-num">
@@ -439,6 +453,18 @@ function onImgError(): void {
 const lastDetection = ref<Vec2 | null>(null);
 const lastRadius = ref(0);
 const smoothBuf: Array<Vec2> = []; // recent raw detections for display smoothing
+
+// --- Focus assist ----------------------------------------------------------------
+// Variance-of-Laplacian sharpness from the same worker call detection already makes, so this is free
+// (no extra frame grab). bestSharpness is a high-water mark for the current focusing session (reset
+// whenever Detect (re)starts) -- there's no meaningful absolute scale, so the UI shows current/best as
+// a percentage: jog Z, watch it climb toward 100%, back off if it starts dropping again.
+const lastSharpness = ref<number | null>(null);
+const bestSharpness = ref(0);
+const focusPct = computed(() => {
+  if (lastSharpness.value == null || bestSharpness.value <= 0) return 0;
+  return Math.min(100, (lastSharpness.value / bestSharpness.value) * 100);
+});
 const frameW = ref(0);
 const frameH = ref(0);
 const imgEl = ref<HTMLImageElement | null>(null);
@@ -540,9 +566,13 @@ async function detectOnce(): Promise<Vec2 | null> {
     frameH.value = img.height;
     const centre = { x: img.width / 2, y: img.height / 2 };
     // detect() transfers the pixel buffer to the worker, so read dimensions/centre first.
-    const circles = await detector.detect(img, detectParams());
+    const res = await detector.detect(img, detectParams());
     if (detector.lastError) setStatus(i18n.global.t("plugins.duetToolAlign.detect.error", { msg: detector.lastError }), "error");
-    const c = cfg.pickLargest ? pickLargest(circles) : pickNearestToCentre(circles, centre);
+    // Update focus-assist regardless of whether a circle was found -- a too-blurry-to-detect frame is
+    // exactly when this is most useful.
+    lastSharpness.value = res.sharpness;
+    bestSharpness.value = Math.max(bestSharpness.value, res.sharpness);
+    const c = cfg.pickLargest ? pickLargest(res.circles) : pickNearestToCentre(res.circles, centre);
     if (!c) { smoothBuf.length = 0; lastDetection.value = null; lastRadius.value = 0; return null; }
     const raw = { x: c.x, y: c.y };
     // Median-smooth the DISPLAYED marker so a jumpy lock reads steadily. The raw point is what we
@@ -566,6 +596,8 @@ async function toggleDetect(): Promise<void> {
   if (!(await ensureCv())) return;
   detecting.value = true;
   aborted = false;
+  bestSharpness.value = 0; // fresh focusing session -- don't compare against a stale peak
+  lastSharpness.value = null;
   while (detecting.value && !aborted) {
     const p = await detectOnce();
     if (p) {
@@ -964,6 +996,8 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
    more room than a bare value did. */
 .aa-field { max-width: 180px; }
 .aa-select { max-width: 200px; }
+.aa-focusbar { width: 100%; }
+.aa-focusbar-bar { max-width: 220px; }
 
 .aa-table { min-height: 0; overflow: auto; }
 .aa-grid { width: 100%; border-collapse: collapse; font-size: 0.8em; }

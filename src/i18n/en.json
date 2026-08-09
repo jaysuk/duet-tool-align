@@ -30,7 +30,8 @@
 		"stop": "Stop"
 	},
 	"focus": {
-		"label": "Focus (Z)"
+		"label": "Focus (Z)",
+		"assist": "Focus"
 	},
 	"detect": {
 		"found": "Detected at {x},{y}  r={r}px",

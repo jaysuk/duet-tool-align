@@ -118,15 +118,19 @@ export interface CvLike {
 		minRadius: number,
 		maxRadius: number,
 	): void;
+	Laplacian(src: CvMat, dst: CvMat, ddepth: number): void;
+	meanStdDev(src: CvMat, mean: CvMat, stddev: CvMat): void;
 	Mat: { new (): CvMat };
 	COLOR_RGBA2GRAY: number;
 	HOUGH_GRADIENT: number;
+	CV_64F: number;
 }
 
 export interface CvMat {
 	cols: number;
 	rows: number;
 	data32F: Float32Array;
+	data64F: Float64Array;
 	delete(): void;
 }
 
@@ -183,6 +187,29 @@ export function detectCircles(cv: CvLike, img: ImageData, opts: DetectOptions = 
 		blurred.delete();
 	}
 	return found;
+}
+
+/**
+ * Focus-assist metric: variance of the Laplacian of a grayscale frame. Standard, simple focus measure
+ * — sharp edges produce large second-derivative swings, so a well-focused (detailed) image has high
+ * variance and a blurred one is low. No absolute meaning (depends on resolution/content/lighting); the
+ * UI compares readings against the best seen in the current focusing session ("hill-climb to the peak
+ * as you jog Z"), not against a fixed threshold.
+ */
+export function computeSharpness(cv: CvLike, gray: CvMat): number {
+	const lap = new cv.Mat();
+	const mean = new cv.Mat();
+	const stddev = new cv.Mat();
+	try {
+		cv.Laplacian(gray, lap, cv.CV_64F);
+		cv.meanStdDev(lap, mean, stddev);
+		const sd = stddev.data64F[0];
+		return sd * sd;
+	} finally {
+		lap.delete();
+		mean.delete();
+		stddev.delete();
+	}
 }
 
 /** Convenience: detect and immediately reduce to the single best (nearest-centre) circle, or null. */

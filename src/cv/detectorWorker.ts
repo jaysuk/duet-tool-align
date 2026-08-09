@@ -109,10 +109,26 @@ function detectContour(cv, work, scale, p) {
   return found;
 }
 
+// Focus-assist metric: variance of the Laplacian (mirrors computeSharpness() in detectNozzle.ts --
+// keep the two in sync). Computed on the same prepped (downscaled/blurred) Mat already built for
+// detection, so this is what the detector itself "sees" -- no extra frame work.
+function sharpness(cv, work) {
+  const lap = new cv.Mat();
+  const mean = new cv.Mat();
+  const stddev = new cv.Mat();
+  try {
+    cv.Laplacian(work, lap, cv.CV_64F);
+    cv.meanStdDev(lap, mean, stddev);
+    const sd = stddev.data64F[0];
+    return sd * sd;
+  } finally { lap.delete(); mean.delete(); stddev.delete(); }
+}
+
 function detect(cv, data, width, height, p) {
   const prepped = prep(cv, data, width, height, p);
   try {
-    return p.method === 'contour' ? detectContour(cv, prepped.work, prepped.scale, p) : detectHough(cv, prepped.work, prepped.scale, p);
+    const circles = p.method === 'contour' ? detectContour(cv, prepped.work, prepped.scale, p) : detectHough(cv, prepped.work, prepped.scale, p);
+    return { circles: circles, sharpness: sharpness(cv, prepped.work) };
   } finally { prepped.work.delete(); }
 }
 
@@ -134,27 +150,33 @@ self.onmessage = function (e) {
     return;
   }
   if (msg.type === 'detect') {
-    if (!ready) { self.postMessage({ type: 'result', id: msg.id, circles: [], error: 'cv-not-ready' }); return; }
+    if (!ready) { self.postMessage({ type: 'result', id: msg.id, circles: [], sharpness: 0, error: 'cv-not-ready' }); return; }
     try {
       const data = new Uint8ClampedArray(msg.buffer);
-      const circles = detect(cvRef, data, msg.width, msg.height, msg.params);
-      if (!loggedOnce) { loggedOnce = true; console.log('[ToolAlign worker] first detect ok', { method: msg.params && msg.params.method, w: msg.width, h: msg.height, found: circles.length, hasMatFromImageData: typeof cvRef.matFromImageData }); }
-      self.postMessage({ type: 'result', id: msg.id, circles: circles });
+      const res = detect(cvRef, data, msg.width, msg.height, msg.params);
+      if (!loggedOnce) { loggedOnce = true; console.log('[ToolAlign worker] first detect ok', { method: msg.params && msg.params.method, w: msg.width, h: msg.height, found: res.circles.length, hasMatFromImageData: typeof cvRef.matFromImageData }); }
+      self.postMessage({ type: 'result', id: msg.id, circles: res.circles, sharpness: res.sharpness });
     } catch (err) {
       // Surface the real exception: previously this was swallowed, so a broken pipeline just looked
       // like "no nozzle found" forever. Log here (visible in the worker's console) and report it back.
       console.error('[ToolAlign worker] detect failed:', (err && err.stack) || String(err));
-      self.postMessage({ type: 'result', id: msg.id, circles: [], error: String(err && err.message || err) });
+      self.postMessage({ type: 'result', id: msg.id, circles: [], sharpness: 0, error: String(err && err.message || err) });
     }
     return;
   }
 };
 `;
 
+/** Candidate circles plus the frame's focus-assist sharpness score (see computeSharpness() in detectNozzle.ts). */
+export interface DetectResult {
+	circles: Array<Circle>;
+	sharpness: number;
+}
+
 export class WorkerDetector {
 	private worker: Worker | null = null;
 	private nextId = 1;
-	private pending = new Map<number, (circles: Array<Circle>) => void>();
+	private pending = new Map<number, (result: DetectResult) => void>();
 	private ready = false;
 	/** Last per-frame detect error reported by the worker (null when the last detect was clean). */
 	lastError: string | null = null;
@@ -191,19 +213,19 @@ export class WorkerDetector {
 
 	private attachResultHandler(): void {
 		this.worker?.addEventListener("message", (e: MessageEvent) => {
-			const d = e.data as { type?: string; id?: number; circles?: Array<Circle>; error?: string };
+			const d = e.data as { type?: string; id?: number; circles?: Array<Circle>; sharpness?: number; error?: string };
 			if (d.type === "result" && typeof d.id === "number") {
 				this.lastError = d.error ?? null;
 				if (d.error) console.warn("[ToolAlign] worker detect error:", d.error);
 				const cb = this.pending.get(d.id);
-				if (cb) { this.pending.delete(d.id); cb(d.circles ?? []); }
+				if (cb) { this.pending.delete(d.id); cb({ circles: d.circles ?? [], sharpness: d.sharpness ?? 0 }); }
 			}
 		});
 	}
 
-	/** Detect candidate circles in a frame. Transfers the pixel buffer (the ImageData is consumed). */
-	detect(img: ImageData, params: DetectParams): Promise<Array<Circle>> {
-		if (!this.worker || !this.ready) return Promise.resolve([]);
+	/** Detect candidate circles (+ focus sharpness) in a frame. Transfers the pixel buffer (the ImageData is consumed). */
+	detect(img: ImageData, params: DetectParams): Promise<DetectResult> {
+		if (!this.worker || !this.ready) return Promise.resolve({ circles: [], sharpness: 0 });
 		const id = this.nextId++;
 		const buffer = img.data.buffer;
 		return new Promise((resolve) => {
