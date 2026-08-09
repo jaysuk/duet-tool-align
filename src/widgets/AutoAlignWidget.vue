@@ -27,9 +27,10 @@
     <div class="aa-cam">
       <div v-if="!cfg.bridgeUrl" class="aa-setup pa-3">
         <div class="text-caption text-medium-emphasis mb-2">{{ $t("plugins.duetToolAlign.noUrl") }}</div>
-        <v-text-field v-model="cfg.bridgeUrl" density="compact" variant="outlined" hide-details autofocus
+        <v-text-field v-model="bridgeUrlDraft" density="compact" variant="outlined" hide-details autofocus
                       :label="$t('plugins.duetToolAlign.settings.bridgeUrl')"
-                      :placeholder="$t('plugins.duetToolAlign.settings.bridgeUrlHint')" />
+                      :placeholder="$t('plugins.duetToolAlign.settings.bridgeUrlHint')"
+                      @keyup.enter="commitBridgeUrlDraft" @blur="commitBridgeUrlDraft" />
       </div>
       <img v-else ref="imgEl" :src="streamSrc" class="aa-img" @error="onImgError" />
 
@@ -272,6 +273,16 @@ const uiStore = useUiStore();
 const cfg = props.config ?? props.widget ?? useConfig();
 
 const disabledNow = computed(() => props.disabled || uiStore.uiFrozen || busy.value);
+
+// The first-run "set the bridge URL" prompt (aa-setup) is only shown while cfg.bridgeUrl is empty --
+// so a v-model straight onto cfg.bridgeUrl would make the prompt (and the field itself) vanish after
+// the very first keystroke, mid-typing, and immediately attempt to load a one-character stream URL.
+// Typing goes into this local draft instead; only Enter/blur commits it to cfg.bridgeUrl.
+const bridgeUrlDraft = ref("");
+function commitBridgeUrlDraft(): void {
+  const v = bridgeUrlDraft.value.trim();
+  if (v) cfg.bridgeUrl = v;
+}
 
 // --- CV engine -----------------------------------------------------------------
 // OpenCV runs entirely in a Web Worker (loading + detection) so the ~17 MB runtime never blocks the
