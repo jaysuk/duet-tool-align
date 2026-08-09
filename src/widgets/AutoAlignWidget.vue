@@ -381,6 +381,29 @@
               <template #append-inner><HelpTip :text="fieldTip(f)" /></template>
             </v-text-field>
           </div>
+          <!-- Right next to the Reference toggle -- not just in the offsets table above, which scrolls
+               out of view once this panel is open -- so switching to Carriage datum and capturing it are
+               a single visible step instead of a hunt-and-scroll. -->
+          <div v-if="cfg.referenceMode === 'point'" class="d-flex ga-2 flex-wrap align-center mb-2">
+            <v-tooltip location="top" text="Centre the carriage datum target on the crosshair using the camera (its own Detection profile, if set) and record the converged position -- every tool's offset (T0 included) is measured from this point. Bring the target roughly into frame first (e.g. Unload/T-1).">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-image-filter-center-focus"
+                       :disabled="disabledNow || detecting || !transform" @click="centreDatum">
+                  {{ $t("plugins.duetToolAlign.offsets.centreDatum") }}
+                </v-btn>
+              </template>
+            </v-tooltip>
+            <v-tooltip location="top" text="Manually record the current machine XY as the carriage datum, without camera assistance -- use this if the datum target isn't something the camera can detect. Jog the switch/feature onto the crosshair first.">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" size="small" variant="text" prepend-icon="mdi-crosshairs-gps" :disabled="disabledNow" @click="captureRefPoint">
+                  {{ $t("plugins.duetToolAlign.offsets.captureDatum") }}
+                </v-btn>
+              </template>
+            </v-tooltip>
+            <span class="text-caption text-medium-emphasis aa-num">
+              {{ $t("plugins.duetToolAlign.offsets.datum") }}: {{ refPoint ? refPoint.x.toFixed(2) + ", " + refPoint.y.toFixed(2) : "—" }}
+            </span>
+          </div>
 
           <div class="d-flex align-center mt-2 mb-1">
             <div class="text-caption text-medium-emphasis">{{ $t("plugins.duetToolAlign.settings.detectionHeading") }}</div>

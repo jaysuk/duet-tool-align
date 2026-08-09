@@ -105,11 +105,19 @@ session (the camera doesn't move between tools); each tool is then aligned indiv
 
 ### Workflow B — carriage-to-tool (Reference = Carriage datum)
 
-1. **Reference = Carriage datum.**
-2. **Capture the datum:** **Unload (T-1)**, jog so the carriage’s datum feature (switch trigger point /
-   reference mark) sits on the crosshair, then **Capture datum**. *(Detection is for round nozzle bores;
-   position a switch/feature by eye on the crosshair.)*
-3. Load a tool, jog its nozzle over the lens, and **Calibrate**.
+1. **Reference = Carriage datum.** Once selected, the datum actions appear right below it in Settings
+   (and again in the offsets table further up, for convenience once Settings is collapsed).
+2. Load a tool, jog its nozzle over the lens, and **Calibrate** — needed once per session, and needed
+   first if you're using the camera-assisted datum capture in the next step.
+3. **Capture the datum** — two ways, pick whichever suits your target:
+   - **Centre & capture datum** (camera-assisted): **Unload (T-1)**, bring the carriage's datum feature
+     roughly into frame, then click it. It converges on the crosshair the same way **Align loaded tool**
+     does for a nozzle, using the datum's own Detection profile if you've set one up (**Settings →
+     Detection → Profile → Carriage datum**), and records the converged position. Best for a round
+     target the camera can actually detect.
+   - **Capture datum (manual)**: jog the switch/feature onto the crosshair by eye, then click it — a
+     direct position read, no camera involved. Use this if the datum isn't something the circle detector
+     can pick out (e.g. a microswitch trigger point).
 4. **Align loaded tool** — centres and records the loaded tool; its offset is `tool position − datum`.
 5. **Change tools yourself**, jog into frame, **Align loaded tool** again — repeat for every tool
    (including T0; each gets a `G10` from the datum).
