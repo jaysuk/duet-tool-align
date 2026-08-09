@@ -1,5 +1,5 @@
 <template>
-  <div class="aa-root fill-height d-flex flex-column">
+  <div class="aa-root d-flex flex-column">
     <!-- Update notice (also surfaced in Flexible Layouts' unified popup via the shared hub) -->
     <v-alert v-if="pendingReload" type="success" density="compact" variant="tonal" class="ma-1">
       {{ $t("plugins.duetToolAlign.updates.reloadPrompt") }}
@@ -1565,10 +1565,17 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
    content height up to aa-side-col, and in practice Vuetify's own v-window (inside the stepper)
    didn't always cooperate, silently clipping a step's content with nothing to scroll to. Simpler and
    more robust: let the whole widget grow to whatever height its content needs, and let the page it's
-   on do the scrolling -- exactly like any normal DWC page already does. container-type lets .aa-main
-   below respond to the widget's own box width (it can be embedded in a Flexible Layouts grid cell of
-   any size, unrelated to viewport width) rather than the viewport. */
-.aa-root { container-type: inline-size; }
+   on do the scrolling -- exactly like any normal DWC page already does (see ClosedLoopTuning's own
+   root, a plain v-container with no forced height, for the same pattern working elsewhere in this
+   plugin ecosystem). That also means dropping the `fill-height` (height: 100%) utility class this
+   root used to carry -- an EXACT height clips anything taller regardless of overflow settings on this
+   element itself, which is exactly what was still happening. min-height: 100% instead: fills the
+   available box the same way when embedded somewhere bounded (e.g. a Flexible Layouts grid cell), but
+   never stops content from growing past it when the host (a normal scrolling DWC page) doesn't hand
+   down a meaningful height at all. container-type lets .aa-main below respond to the widget's own box
+   width (it can be embedded in a Flexible Layouts grid cell of any size, unrelated to viewport width)
+   rather than the viewport. */
+.aa-root { min-height: 100%; container-type: inline-size; }
 
 /* Camera (left) + everything else (right), side by side so the camera gets a squarish box instead of
    being squeezed thin by every control row stacking underneath it. align-items: flex-start (rather
