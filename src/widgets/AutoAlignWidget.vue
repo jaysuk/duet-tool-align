@@ -792,17 +792,24 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
 .aa-root { min-height: 0; overflow: hidden; container-type: inline-size; }
 
 /* Camera (left) + everything else (right), side by side so the camera gets a squarish box instead
-   of being squeezed thin by every control row stacking underneath it. align-items: flex-start so
-   aa-cam-col sizes to its own (square) content instead of stretching to match the taller sibling. */
-.aa-main { min-height: 0; gap: 8px; align-items: flex-start; }
+   of being squeezed thin by every control row stacking underneath it. Default align-items: stretch
+   is kept deliberately -- aa-side-col relies on it to get a bounded height so its own overflow-y:
+   auto can scroll; only aa-cam-col opts out (align-self below), since stretching it would distort
+   the square. */
+.aa-main { min-height: 0; gap: 8px; }
 
 /* Half the row's width -- deliberately sized off width, not height: this widget's own height often
    isn't a definite value (Flexible Layouts panels/the standalone page can auto-size to content), and
    aspect-ratio can't compute a sensible size from an indefinite one. Width is always definite here
    (the row gets it from the widget's own box), so aa-cam below can go width: 100%; aspect-ratio: 1/1
-   and get a reliable square regardless of how much vertical space is actually available. */
-.aa-cam-col { flex: 0 0 50%; max-width: 50%; }
+   and get a reliable square regardless of how much vertical space is actually available.
+   align-self: flex-start so this column doesn't stretch to aa-side-col's (taller, scrolling)
+   height -- it should stay exactly as tall as its own square content. */
+.aa-cam-col { flex: 0 0 50%; max-width: 50%; align-self: flex-start; }
 
+/* Stretches to aa-main's full height (default align-items) so this box is actually bounded --
+   without that, overflow-y: auto has nothing to overflow against and never shows a scrollbar,
+   letting content run past aa-root's overflow: hidden with no way to reach it. */
 .aa-side-col { min-width: 0; min-height: 0; overflow-y: auto; }
 
 /* Narrow embeds (e.g. a slim Flexible Layouts panel): drop back to the original stacked layout
