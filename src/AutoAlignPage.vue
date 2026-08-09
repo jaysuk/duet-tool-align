@@ -1,5 +1,5 @@
 <template>
-  <v-container fluid class="fill-height pa-2 align-start">
+  <v-container fluid class="pa-2 align-start">
     <v-card class="aa-page-card" width="100%">
       <v-card-title class="text-subtitle-1 d-flex align-center">
         <v-icon class="mr-2">mdi-image-filter-center-focus</v-icon>
@@ -46,5 +46,11 @@ function onToggleAutoCheck(v: boolean): void { autoCheck.value = v; setUpdateChe
 </script>
 
 <style scoped>
-.aa-page-card { display: flex; flex-direction: column; max-height: calc(100vh - 120px); }
+/* No max-height here any more -- v-card has overflow: hidden by default, so max-height +
+   inherited-overflow was clipping anything taller than 100vh - 120px with nothing to scroll to. Every
+   fix this session to AutoAlignWidget.vue's own internal overflow/height handling was chasing symptoms
+   inside a page that was still capping the card itself at the top level -- this was the actual root
+   cause. Let the card (and page) grow to content and the document scroll normally, same as any other
+   DWC page. */
+.aa-page-card { display: flex; flex-direction: column; }
 </style>
