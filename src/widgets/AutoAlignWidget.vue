@@ -33,7 +33,7 @@
                       @keyup.enter="commitBridgeUrlDraft" @blur="commitBridgeUrlDraft" />
       </div>
       <img v-else ref="imgEl" :src="streamSrc" class="aa-img" :class="{ 'aa-img-measuring': measuring }"
-           @error="onImgError" @contextmenu.prevent="toggleMeasure" @click="onImgMeasureClick" />
+           @load="onImgLoad" @error="onImgError" @contextmenu.prevent="toggleMeasure" @click="onImgMeasureClick" />
 
       <div class="aa-overlay">
         <div class="aa-cross-h" />
@@ -533,6 +533,17 @@ const focusPct = computed(() => {
 const frameW = ref(0);
 const frameH = ref(0);
 const imgEl = ref<HTMLImageElement | null>(null);
+// Seed frameW/frameH from the live stream's own natural size as soon as it connects, so the pixel
+// ruler and click-to-measure (which both key off frameW/frameH via imgScale below) work immediately --
+// previously they stayed dead until a detect() call happened to populate frameW/frameH as a side
+// effect of grabbing a CV snapshot, which isn't something turning the ruler/measure toggle on does.
+// A later detect() call overwrites these with the exact CV-grabbed frame's size (normally identical).
+function onImgLoad(): void {
+  const img = imgEl.value;
+  if (!img || !img.naturalWidth || !img.naturalHeight) return;
+  frameW.value = img.naturalWidth;
+  frameH.value = img.naturalHeight;
+}
 // Map the detected circle (in original frame pixels) onto the displayed <img>, accounting for the
 // letterbox (object-fit: contain) so the marker sits exactly on what was detected and is drawn at the
 // real detected radius. Recomputes each detection (lastDetection/lastRadius change).
