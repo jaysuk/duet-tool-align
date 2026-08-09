@@ -792,12 +792,16 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
 .aa-root { min-height: 0; overflow: hidden; container-type: inline-size; }
 
 /* Camera (left) + everything else (right), side by side so the camera gets a squarish box instead
-   of being squeezed thin by every control row stacking underneath it. */
-.aa-main { min-height: 0; gap: 8px; }
+   of being squeezed thin by every control row stacking underneath it. align-items: flex-start so
+   aa-cam-col sizes to its own (square) content instead of stretching to match the taller sibling. */
+.aa-main { min-height: 0; gap: 8px; align-items: flex-start; }
 
-/* Square-ish and driven by the available height: width follows height via aspect-ratio, capped so
-   it can't crowd out the settings column on a very short/wide container. */
-.aa-cam-col { aspect-ratio: 1 / 1; height: 100%; max-width: 60%; min-width: 160px; }
+/* Half the row's width -- deliberately sized off width, not height: this widget's own height often
+   isn't a definite value (Flexible Layouts panels/the standalone page can auto-size to content), and
+   aspect-ratio can't compute a sensible size from an indefinite one. Width is always definite here
+   (the row gets it from the widget's own box), so aa-cam below can go width: 100%; aspect-ratio: 1/1
+   and get a reliable square regardless of how much vertical space is actually available. */
+.aa-cam-col { flex: 0 0 50%; max-width: 50%; }
 
 .aa-side-col { min-width: 0; min-height: 0; overflow-y: auto; }
 
@@ -805,11 +809,11 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
    rather than crushing either column past usability. */
 @container (max-width: 480px) {
   .aa-main { flex-direction: column; }
-  .aa-cam-col { aspect-ratio: auto; width: 100%; max-width: none; height: auto; max-height: 45vh; }
+  .aa-cam-col { flex-basis: auto; width: 100%; max-width: none; }
   .aa-side-col { overflow-y: visible; }
 }
 
-.aa-cam { position: relative; width: 100%; height: 100%; min-height: 120px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #000; }
+.aa-cam { position: relative; width: 100%; aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #000; }
 .aa-img { max-width: 100%; max-height: 100%; display: block; object-fit: contain; }
 /* The setup prompt (shown until a bridge URL is set) sits on a normal surface, not the black camera
    backdrop, so the input is readable; it's always interactive regardless of connection state. */
