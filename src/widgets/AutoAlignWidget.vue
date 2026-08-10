@@ -66,7 +66,7 @@
     <div class="aa-side-col flex-grow-1 d-flex flex-column">
     <!-- Status + live machine position, one row -- otherwise you're jogging blind unless you're also
          watching DWC's own status bar elsewhere. -->
-    <div class="aa-status text-caption px-2 py-1 flex-shrink-0 d-flex align-center ga-3" :class="statusClass">
+    <div class="aa-status text-caption px-2 py-1 flex-shrink-0 d-flex flex-wrap align-center ga-3" :class="statusClass">
       <v-icon size="14" class="mr-1">{{ statusIcon }}</v-icon><span>{{ statusText }}</span>
       <v-spacer />
       <span class="aa-num text-medium-emphasis">X {{ fmtPos(livePos.x) }} Y {{ fmtPos(livePos.y) }} Z {{ fmtPos(livePos.z) }}</span>
