@@ -360,12 +360,12 @@
           </div>
 
           <div class="text-subtitle-2 mb-1">3. Calibrate</div>
-          <div v-if="detecting" class="text-caption text-warning mb-2 d-flex align-center ga-1">
+          <div v-if="doCalibrateReason" class="text-caption text-warning mb-2 d-flex align-center ga-1">
             <v-icon size="14">mdi-alert</v-icon>
-            <span>Stop Detect above first -- Calibrate runs its own detection loop and can't run at the same time as Detect's.</span>
+            <span>{{ doCalibrateReason }}</span>
           </div>
           <div class="d-flex ga-2 flex-wrap align-center mb-3">
-            <v-tooltip location="top" :text="detecting ? 'Stop Detect above first -- Calibrate runs its own detection loop, so the two can\'t run at once.' : 'Jog a small star pattern from the current position and solve the pixel-to-mm transform. Run once per camera position/zoom -- not per tool.'">
+            <v-tooltip location="top" :text="doCalibrateReason ?? 'Jog a small star pattern from the current position and solve the pixel-to-mm transform. Run once per camera position/zoom -- not per tool.'">
               <template #activator="{ props }">
                 <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-grid" :disabled="disabledNow || detecting || !cfg.bridgeUrl" @click="doCalibrate">
                   {{ $t("plugins.duetToolAlign.actions.calibrate") }}
@@ -395,12 +395,12 @@
                 </template>
               </v-tooltip>
             </div>
-            <div v-if="detecting" class="text-caption text-warning mb-2 d-flex align-center ga-1">
+            <div v-if="centreDatumReason" class="text-caption text-warning mb-2 d-flex align-center ga-1">
               <v-icon size="14">mdi-alert</v-icon>
-              <span>Stop Detect above first -- Centre & capture datum runs its own detection loop and can't run at the same time as Detect's.</span>
+              <span>{{ centreDatumReason }}</span>
             </div>
             <div class="d-flex ga-2 flex-wrap align-center mb-3">
-              <v-tooltip location="top" :text="detecting ? 'Stop Detect above first -- Centre & capture datum runs its own detection loop, so the two can\'t run at once.' : 'Centre the carriage datum target on the crosshair using the camera (its own Detection profile, if set above) and record the converged position -- every tool\'s offset (T0 included) is measured from this point.'">
+              <v-tooltip location="top" :text="centreDatumReason ?? 'Centre the carriage datum target on the crosshair using the camera (its own Detection profile, if set above) and record the converged position -- every tool\'s offset (T0 included) is measured from this point.'">
                 <template #activator="{ props }">
                   <v-btn v-bind="props" size="small" color="primary" variant="flat" prepend-icon="mdi-image-filter-center-focus"
                          :disabled="disabledNow || detecting || !transform" @click="centreDatum">
@@ -604,12 +604,12 @@
               </v-expansion-panels>
             </details>
 
-            <div v-if="detecting" class="text-caption text-warning mb-2 d-flex align-center ga-1">
+            <div v-if="runFullReason" class="text-caption text-warning mb-2 d-flex align-center ga-1">
               <v-icon size="14">mdi-alert</v-icon>
-              <span>Stop Detect above before aligning -- it runs its own detection loop and can't run at the same time as Detect's.</span>
+              <span>{{ runFullReason }}</span>
             </div>
             <div class="d-flex ga-2 flex-wrap align-center">
-              <v-tooltip location="top" :text="detecting ? 'Stop Detect above first -- Align runs its own detection loop, so the two can\'t run at once.' : 'Centre the currently-loaded tool and capture its offset. Does not change tools or travel on its own -- select/load the tool and jog it into frame yourself first.'">
+              <v-tooltip location="top" :text="runFullReason ?? 'Centre the currently-loaded tool and capture its offset. Does not change tools or travel on its own -- select/load the tool and jog it into frame yourself first.'">
                 <template #activator="{ props }">
                   <v-btn v-bind="props" size="small" color="primary" variant="flat" prepend-icon="mdi-play"
                          :disabled="disabledNow || detecting || current < 0 || !transform" @click="runFull">
@@ -617,7 +617,7 @@
                   </v-btn>
                 </template>
               </v-tooltip>
-              <v-tooltip location="top" :text="detecting ? 'Stop Detect above first -- Centre runs its own detection loop, so the two can\'t run at once.' : 'Centre the current tool\'s nozzle on the crosshair and record its position, without applying an offset -- for testing.'">
+              <v-tooltip location="top" :text="centreCurrentReason ?? 'Centre the current tool\'s nozzle on the crosshair and record its position, without applying an offset -- for testing.'">
                 <template #activator="{ props }">
                   <v-btn v-bind="props" size="small" variant="text" prepend-icon="mdi-image-filter-center-focus"
                          :disabled="disabledNow || detecting || current < 0 || !transform" @click="centreCurrent">
@@ -1223,6 +1223,48 @@ const progress = {
 // statusText -- that line gets overwritten every ~150ms by the live Detect loop, so reusing it here
 // would flicker with unrelated detection messages instead of showing calibration state.
 const calibResult = ref("");
+
+// Explains exactly which prerequisite a disabled button is missing, in priority order, instead of it
+// just sitting there disabled with no way to tell why -- "Stop Detect first" alone wasn't a complete
+// answer, since current<0/!transform disable the same buttons for entirely different reasons. Returns
+// null (nothing to explain) once every condition clears, so callers fall back to the button's normal
+// description text.
+function disabledReason(...conds: Array<[unknown, string]>): string | null {
+  for (const [cond, msg] of conds) if (cond) return msg;
+  return null;
+}
+// props.disabled/uiFrozen checked ahead of busy since they're the host/DWC overriding the widget
+// wholesale -- if either applies, "an operation is running" would be a misleading explanation.
+const doCalibrateReason = computed(() => disabledReason(
+  [props.disabled, "This widget is disabled right now (host-controlled)."],
+  [uiStore.uiFrozen, "DWC's UI is frozen -- e.g. during an emergency stop or reset."],
+  [busy.value, "An operation is already running -- wait for it to finish, or Stop it."],
+  [detecting.value, "Stop Detect above first -- Calibrate runs its own detection loop, so the two can't run at once."],
+  [!cfg.bridgeUrl, "Set the camera bridge URL first (step 1)."],
+));
+const centreCurrentReason = computed(() => disabledReason(
+  [props.disabled, "This widget is disabled right now (host-controlled)."],
+  [uiStore.uiFrozen, "DWC's UI is frozen -- e.g. during an emergency stop or reset."],
+  [busy.value, "An operation is already running -- wait for it to finish, or Stop it."],
+  [detecting.value, "Stop Detect above first -- Centre runs its own detection loop, so the two can't run at once."],
+  [current.value < 0, "Load a tool first, using the tool buttons above."],
+  [!transform.value, "Calibrate first (step 3) -- Centre needs the pixel-to-mm transform it produces."],
+));
+const runFullReason = computed(() => disabledReason(
+  [props.disabled, "This widget is disabled right now (host-controlled)."],
+  [uiStore.uiFrozen, "DWC's UI is frozen -- e.g. during an emergency stop or reset."],
+  [busy.value, "An operation is already running -- wait for it to finish, or Stop it."],
+  [detecting.value, "Stop Detect above first -- Align runs its own detection loop, so the two can't run at once."],
+  [current.value < 0, "Load a tool first, using the tool buttons above."],
+  [!transform.value, "Calibrate first (step 3) -- Align needs the pixel-to-mm transform it produces."],
+));
+const centreDatumReason = computed(() => disabledReason(
+  [props.disabled, "This widget is disabled right now (host-controlled)."],
+  [uiStore.uiFrozen, "DWC's UI is frozen -- e.g. during an emergency stop or reset."],
+  [busy.value, "An operation is already running -- wait for it to finish, or Stop it."],
+  [detecting.value, "Stop Detect above first -- Centre & capture datum runs its own detection loop, so the two can't run at once."],
+  [!transform.value, "Calibrate first, above -- Centre & capture datum needs the pixel-to-mm transform it produces."],
+));
 
 async function doCalibrate(): Promise<void> {
   if (busy.value) return;
