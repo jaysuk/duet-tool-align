@@ -191,49 +191,56 @@
           <div class="text-subtitle-2 mt-1 mb-1">1. Detect &amp; tune</div>
           <div class="text-caption text-medium-emphasis mb-2">Jog whatever's under the lens into frame and focus, then use Detect to check the lock.
             If a carriage datum is unloaded and in frame, its profile is selected below automatically -- otherwise Centre &amp; capture datum will fail against the wrong settings.</div>
-          <div class="d-flex flex-wrap align-center ga-1 mb-2">
-            <v-tooltip location="top" text="Jog X by the step size, to bring the tool's nozzle into frame.">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('X', -1)">X−</v-btn>
-              </template>
-            </v-tooltip>
-            <v-tooltip location="top" text="Jog X by the step size, to bring the tool's nozzle into frame.">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('X', 1)">X+</v-btn>
-              </template>
-            </v-tooltip>
-            <v-tooltip location="top" text="Jog Y by the step size, to bring the tool's nozzle into frame.">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('Y', -1)">Y−</v-btn>
-              </template>
-            </v-tooltip>
-            <v-tooltip location="top" text="Jog Y by the step size, to bring the tool's nozzle into frame.">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('Y', 1)">Y+</v-btn>
-              </template>
-            </v-tooltip>
-            <v-tooltip location="top" text="Jog Z down by the step size, to bring the nozzle into focus.">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(-1)">Z−</v-btn>
-              </template>
-            </v-tooltip>
-            <v-tooltip location="top" text="Jog Z up by the step size, to bring the nozzle into focus.">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(1)">Z+</v-btn>
-              </template>
-            </v-tooltip>
-            <v-tooltip location="top" max-width="280" text="X/Y jog distance per button press (mm); Z uses its own separate step below. Use a big step to bring a far-off tool into frame, then a small step to fine-tune. (default: 0.1)">
-              <template #activator="{ props }">
-                <v-text-field v-bind="props" v-model.number="cfg.xyStep" type="number" min="0.01" max="50" step="0.05"
-                              density="compact" variant="outlined" hide-details class="aa-narrow" suffix="mm" />
-              </template>
-            </v-tooltip>
-            <v-tooltip location="top" max-width="280" text="Z distance per -Z/+Z press (mm), to bring the nozzle into focus. Typical 0.02–0.2. (default: 0.05)">
-              <template #activator="{ props }">
-                <v-text-field v-bind="props" v-model.number="cfg.zStep" type="number" min="0.01" max="2" step="0.01"
-                              density="compact" variant="outlined" hide-details class="aa-narrow" suffix="mm" />
-              </template>
-            </v-tooltip>
+          <div class="d-flex flex-wrap align-center ga-3 mb-2">
+            <div class="d-flex align-center ga-1 aa-jog-group">
+              <span class="text-caption text-medium-emphasis mr-1">XY</span>
+              <v-tooltip location="top" text="Jog X by the step size, to bring the tool's nozzle into frame.">
+                <template #activator="{ props }">
+                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('X', -1)">X−</v-btn>
+                </template>
+              </v-tooltip>
+              <v-tooltip location="top" text="Jog X by the step size, to bring the tool's nozzle into frame.">
+                <template #activator="{ props }">
+                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('X', 1)">X+</v-btn>
+                </template>
+              </v-tooltip>
+              <v-tooltip location="top" text="Jog Y by the step size, to bring the tool's nozzle into frame.">
+                <template #activator="{ props }">
+                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('Y', -1)">Y−</v-btn>
+                </template>
+              </v-tooltip>
+              <v-tooltip location="top" text="Jog Y by the step size, to bring the tool's nozzle into frame.">
+                <template #activator="{ props }">
+                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('Y', 1)">Y+</v-btn>
+                </template>
+              </v-tooltip>
+              <v-tooltip location="top" max-width="280" text="X/Y jog distance per button press (mm). Use a big step to bring a far-off tool into frame, then a small step to fine-tune. (default: 0.1)">
+                <template #activator="{ props }">
+                  <v-text-field v-bind="props" v-model.number="cfg.xyStep" type="number" min="0.01" max="50" step="0.05" label="XY step"
+                                density="compact" variant="outlined" hide-details class="aa-step-field" suffix="mm" />
+                </template>
+              </v-tooltip>
+            </div>
+            <v-divider vertical class="aa-jog-divider" />
+            <div class="d-flex align-center ga-1 aa-jog-group">
+              <span class="text-caption text-medium-emphasis mr-1">Z</span>
+              <v-tooltip location="top" text="Jog Z down by the step size, to bring the nozzle into focus.">
+                <template #activator="{ props }">
+                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(-1)">Z−</v-btn>
+                </template>
+              </v-tooltip>
+              <v-tooltip location="top" text="Jog Z up by the step size, to bring the nozzle into focus.">
+                <template #activator="{ props }">
+                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(1)">Z+</v-btn>
+                </template>
+              </v-tooltip>
+              <v-tooltip location="top" max-width="280" text="Z distance per -Z/+Z press (mm), to bring the nozzle into focus. Typical 0.02–0.2. (default: 0.05)">
+                <template #activator="{ props }">
+                  <v-text-field v-bind="props" v-model.number="cfg.zStep" type="number" min="0.01" max="2" step="0.01" label="Z step"
+                                density="compact" variant="outlined" hide-details class="aa-step-field" suffix="mm" />
+                </template>
+              </v-tooltip>
+            </div>
           </div>
 
           <div class="d-flex flex-wrap align-center ga-1 mb-2">
@@ -488,42 +495,63 @@
               </div>
             </div>
 
+            <div class="d-flex flex-wrap align-center ga-3 mb-2">
+              <div class="d-flex align-center ga-1 aa-jog-group">
+                <span class="text-caption text-medium-emphasis mr-1">XY</span>
+                <v-tooltip location="top" text="Jog X by the step size, to bring the tool's nozzle into frame.">
+                  <template #activator="{ props }">
+                    <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('X', -1)">X−</v-btn>
+                  </template>
+                </v-tooltip>
+                <v-tooltip location="top" text="Jog X by the step size, to bring the tool's nozzle into frame.">
+                  <template #activator="{ props }">
+                    <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('X', 1)">X+</v-btn>
+                  </template>
+                </v-tooltip>
+                <v-tooltip location="top" text="Jog Y by the step size, to bring the tool's nozzle into frame.">
+                  <template #activator="{ props }">
+                    <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('Y', -1)">Y−</v-btn>
+                  </template>
+                </v-tooltip>
+                <v-tooltip location="top" text="Jog Y by the step size, to bring the tool's nozzle into frame.">
+                  <template #activator="{ props }">
+                    <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('Y', 1)">Y+</v-btn>
+                  </template>
+                </v-tooltip>
+                <v-tooltip location="top" max-width="280" text="X/Y jog distance per button press (mm). Use a big step to bring a far-off tool into frame, then a small step to fine-tune. (default: 0.1)">
+                  <template #activator="{ props }">
+                    <v-text-field v-bind="props" v-model.number="cfg.xyStep" type="number" min="0.01" max="50" step="0.05" label="XY step"
+                                  density="compact" variant="outlined" hide-details class="aa-step-field" suffix="mm" />
+                  </template>
+                </v-tooltip>
+              </div>
+              <v-divider vertical class="aa-jog-divider" />
+              <div class="d-flex align-center ga-1 aa-jog-group">
+                <span class="text-caption text-medium-emphasis mr-1">Z</span>
+                <v-tooltip location="top" text="Jog Z down by the step size, to bring the nozzle into focus.">
+                  <template #activator="{ props }">
+                    <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(-1)">Z−</v-btn>
+                  </template>
+                </v-tooltip>
+                <v-tooltip location="top" text="Jog Z up by the step size, to bring the nozzle into focus.">
+                  <template #activator="{ props }">
+                    <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(1)">Z+</v-btn>
+                  </template>
+                </v-tooltip>
+                <v-tooltip location="top" max-width="280" text="Z distance per -Z/+Z press (mm), to bring the nozzle into focus. Typical 0.02–0.2. (default: 0.05)">
+                  <template #activator="{ props }">
+                    <v-text-field v-bind="props" v-model.number="cfg.zStep" type="number" min="0.01" max="2" step="0.01" label="Z step"
+                                  density="compact" variant="outlined" hide-details class="aa-step-field" suffix="mm" />
+                  </template>
+                </v-tooltip>
+              </div>
+            </div>
             <div class="d-flex ga-1 flex-wrap align-center mb-2">
               <v-tooltip location="top" text="Travel to the saved camera position (X/Y, and Z if saved).">
                 <template #activator="{ props }">
                   <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-camera-marker" :disabled="disabledNow || !hasCameraPos" @click="gotoCamera">
                     {{ $t("plugins.duetToolAlign.camera.goto") }}
                   </v-btn>
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" text="Jog X by the step size, to bring the tool's nozzle into frame.">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('X', -1)">X−</v-btn>
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" text="Jog X by the step size, to bring the tool's nozzle into frame.">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('X', 1)">X+</v-btn>
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" text="Jog Y by the step size, to bring the tool's nozzle into frame.">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('Y', -1)">Y−</v-btn>
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" text="Jog Y by the step size, to bring the tool's nozzle into frame.">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('Y', 1)">Y+</v-btn>
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" text="Jog Z down by the step size, to bring the nozzle into focus.">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(-1)">Z−</v-btn>
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" text="Jog Z up by the step size, to bring the nozzle into focus.">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(1)">Z+</v-btn>
                 </template>
               </v-tooltip>
               <v-tooltip location="top" text="Continuously detect without moving anything -- confirm the lock before aligning. Uses whichever profile the loaded tool resolves to.">
@@ -1844,6 +1872,12 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
 
 .aa-btn { min-width: 0; }
 .aa-narrow { max-width: 120px; }
+/* Groups a jog axis's buttons with its own step-size field (see the "XY"/"Z" caption beside each) so
+   it's visually unambiguous which field controls which axis, and a divider keeps XY and Z from reading
+   as one continuous row of controls. */
+.aa-jog-group { flex-wrap: nowrap; }
+.aa-jog-divider { align-self: stretch; margin: 0 2px; }
+.aa-step-field { max-width: 140px; }
 /* A little wider than before (was 160px): labels are now short (unit moved to the field's own
    suffix, see NumField.unit), but a value + suffix together (e.g. "30000" + "mm/min") still wants
    more room than a bare value did. */
