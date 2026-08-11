@@ -8,12 +8,14 @@
  * start/finish/save commands) plus the CV-specific knobs, so a future merge into FL is a rename, not
  * a redesign.
  *
- * The calibration transform (pixel-to-mm) is persisted too, in `transform` below -- it only depends
- * on the camera's fixed mount position/zoom relative to whatever's under the lens, which for a
- * rigidly-mounted camera doesn't change between sessions, so re-running Calibrate after every page
- * reload for no physical reason was pure friction. Calibrate still overwrites it whenever you actually
- * need to (camera bumped, refocused, repositioned) -- this only saves you re-running it when nothing
- * changed.
+ * The calibration transform (pixel-to-mm) is persisted too, in `transform` below, but only when
+ * `cameraRigid` is set -- a rigidly-mounted camera's calibration only depends on its fixed mount
+ * position/zoom relative to whatever's under the lens, so it doesn't change between sessions and
+ * re-running Calibrate after every page reload for no physical reason is pure friction. A camera that
+ * gets picked up/repositioned between sessions (handheld, magnetically mounted, etc.) has no such
+ * guarantee, so `cameraRigid` defaults to false and the widget keeps that case's transform local to the
+ * session instead of persisting it. Calibrate still overwrites the live value whenever you actually need
+ * it to (camera bumped, refocused, repositioned) regardless of which mode you're in.
  */
 import { reactive } from "vue";
 
@@ -139,9 +141,13 @@ export interface AutoAlignConfig {
 	finishCommand: string;
 	saveCommand: string;
 
+	/** Whether the camera is fixed in place relative to the machine (vs. handheld/removable). Gates
+	 *  whether `transform` below is persisted -- see the module doc comment above. */
+	cameraRigid: boolean;
+
 	/** Pixel-to-mm calibration transform from the last successful Calibrate, or null if never run
-	 *  (or run and then invalidated) this camera setup. See the module doc comment above for why
-	 *  this is persisted rather than reset every session. */
+	 *  (or run and then invalidated) this camera setup. Only meaningful to persist across reloads when
+	 *  `cameraRigid` is set -- see the module doc comment above. */
 	transform: Mat2 | null;
 }
 
@@ -185,6 +191,7 @@ export function defaultConfig(): AutoAlignConfig {
 		startCommand: "",
 		finishCommand: "",
 		saveCommand: "M500",
+		cameraRigid: false,
 		transform: null,
 	};
 }

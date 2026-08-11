@@ -360,6 +360,17 @@
           </div>
 
           <div class="text-subtitle-2 mb-1">3. Calibrate</div>
+          <div class="d-flex align-center mb-2">
+            <v-checkbox
+              :model-value="cfg.cameraRigid"
+              label="Camera is rigidly mounted to the machine"
+              density="compact"
+              hide-details
+              class="flex-grow-0"
+              @update:model-value="(v) => setCameraRigid(!!v)"
+            />
+            <HelpTip text="On: the calibration below is saved and reused after a page reload, since a fixed camera's pixel-to-mm relationship doesn't change on its own. Off (default): calibration is kept for this session only and cleared on reload, since a handheld/removable camera can't be assumed to still be in the same spot next time." />
+          </div>
           <div v-if="doCalibrateReason" class="text-caption text-warning mb-2 d-flex align-center ga-1">
             <v-icon size="14">mdi-alert</v-icon>
             <span>{{ doCalibrateReason }}</span>
@@ -1163,14 +1174,28 @@ function frameCentre(): Vec2 {
 }
 
 // --- Alignment state -----------------------------------------------------------
-// Backed by cfg.transform (persisted) rather than a local-only ref -- a rigidly-mounted camera's
+// Backed by cfg.transform (persisted) when cfg.cameraRigid is set -- a rigidly-mounted camera's
 // pixel-to-mm calibration doesn't change between page reloads, so there's no reason to force
-// re-running Calibrate every session. Writing transform.value (Calibrate's success path) writes
-// straight through to cfg.transform, same as every other persisted setting.
+// re-running Calibrate every session. Otherwise falls back to a local-only ref: a handheld/removable
+// camera's calibration isn't guaranteed to still be valid next session, so it isn't persisted.
+const sessionTransform = ref<Mat2 | null>(null);
 const transform = computed<Mat2 | null>({
-  get: () => cfg.transform,
-  set: (v) => { cfg.transform = v; },
+  get: () => (cfg.cameraRigid ? cfg.transform : sessionTransform.value),
+  set: (v) => { if (cfg.cameraRigid) cfg.transform = v; else sessionTransform.value = v; },
 });
+// Moving between rigid/non-rigid carries over whatever calibration is currently active. A transform
+// left over in cfg.transform from before switching to non-rigid is cleared rather than left sitting
+// around unused -- once you've said the mount isn't fixed, an old saved calibration is presumed stale.
+function setCameraRigid(rigid: boolean): void {
+  const current = transform.value;
+  cfg.cameraRigid = rigid;
+  if (rigid) {
+    cfg.transform = current;
+  } else {
+    sessionTransform.value = current;
+    cfg.transform = null;
+  }
+}
 const captures = ref<Record<number, AxisCapture>>({});
 // Captured carriage datum (referenceMode = "point"): the 0,0 every tool is offset from.
 const refPoint = ref<{ x: number; y: number } | null>(null);
