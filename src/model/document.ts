@@ -8,13 +8,18 @@
  * start/finish/save commands) plus the CV-specific knobs, so a future merge into FL is a rename, not
  * a redesign.
  *
- * The persisted calibration transform is intentionally NOT stored here: it's a per-session
- * measurement that depends on the exact camera/lens placement and is recomputed each run.
+ * The calibration transform (pixel-to-mm) is persisted too, in `transform` below -- it only depends
+ * on the camera's fixed mount position/zoom relative to whatever's under the lens, which for a
+ * rigidly-mounted camera doesn't change between sessions, so re-running Calibrate after every page
+ * reload for no physical reason was pure friction. Calibrate still overwrites it whenever you actually
+ * need to (camera bumped, refocused, repositioned) -- this only saves you re-running it when nothing
+ * changed.
  */
 import { reactive } from "vue";
 
 import { useSettingsStore } from "@/stores/settings";
 
+import type { Mat2 } from "../cv/geometry";
 import { PLUGIN_ID } from "./constants";
 
 /**
@@ -133,6 +138,11 @@ export interface AutoAlignConfig {
 	startCommand: string;
 	finishCommand: string;
 	saveCommand: string;
+
+	/** Pixel-to-mm calibration transform from the last successful Calibrate, or null if never run
+	 *  (or run and then invalidated) this camera setup. See the module doc comment above for why
+	 *  this is persisted rather than reset every session. */
+	transform: Mat2 | null;
 }
 
 export function defaultConfig(): AutoAlignConfig {
@@ -175,6 +185,7 @@ export function defaultConfig(): AutoAlignConfig {
 		startCommand: "",
 		finishCommand: "",
 		saveCommand: "M500",
+		transform: null,
 	};
 }
 

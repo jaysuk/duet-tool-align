@@ -373,7 +373,7 @@
               </template>
             </v-tooltip>
             <span v-if="transform" class="text-caption" style="color: rgb(var(--v-theme-success));">
-              <v-icon size="14" class="mr-1">mdi-check-circle</v-icon>Calibrated<span v-if="calibResult">: {{ calibResult }}</span>
+              <v-icon size="14" class="mr-1">mdi-check-circle</v-icon>Calibrated<span v-if="calibResult">: {{ calibResult }}</span><span v-else class="text-medium-emphasis"> (from a previous session -- re-run if the camera's moved)</span>
             </span>
           </div>
 
@@ -1163,7 +1163,14 @@ function frameCentre(): Vec2 {
 }
 
 // --- Alignment state -----------------------------------------------------------
-const transform = ref<Mat2 | null>(null);
+// Backed by cfg.transform (persisted) rather than a local-only ref -- a rigidly-mounted camera's
+// pixel-to-mm calibration doesn't change between page reloads, so there's no reason to force
+// re-running Calibrate every session. Writing transform.value (Calibrate's success path) writes
+// straight through to cfg.transform, same as every other persisted setting.
+const transform = computed<Mat2 | null>({
+  get: () => cfg.transform,
+  set: (v) => { cfg.transform = v; },
+});
 const captures = ref<Record<number, AxisCapture>>({});
 // Captured carriage datum (referenceMode = "point"): the 0,0 every tool is offset from.
 const refPoint = ref<{ x: number; y: number } | null>(null);
