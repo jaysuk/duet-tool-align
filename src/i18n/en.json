@@ -41,7 +41,7 @@
 		"step5": "Review & save",
 		"checklistLoad": "Load {name}",
 		"checklistFrame": "Go to camera, then jog {name}'s nozzle into frame",
-		"checklistDetect": "Confirm Detect locks on cleanly",
+		"checklistDetect": "Confirm Detect locks on cleanly, then click Detect again to stop it",
 		"checklistAlign": "Align loaded tool",
 		"noTools": "No tools found in the object model.",
 		"toolProgress": "{index} of {total}"

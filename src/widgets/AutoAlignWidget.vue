@@ -360,8 +360,12 @@
           </div>
 
           <div class="text-subtitle-2 mb-1">3. Calibrate</div>
+          <div v-if="detecting" class="text-caption text-warning mb-2 d-flex align-center ga-1">
+            <v-icon size="14">mdi-alert</v-icon>
+            <span>Stop Detect above first -- Calibrate runs its own detection loop and can't run at the same time as Detect's.</span>
+          </div>
           <div class="d-flex ga-2 flex-wrap align-center mb-3">
-            <v-tooltip location="top" text="Jog a small star pattern from the current position and solve the pixel-to-mm transform. Run once per camera position/zoom -- not per tool.">
+            <v-tooltip location="top" :text="detecting ? 'Stop Detect above first -- Calibrate runs its own detection loop, so the two can\'t run at once.' : 'Jog a small star pattern from the current position and solve the pixel-to-mm transform. Run once per camera position/zoom -- not per tool.'">
               <template #activator="{ props }">
                 <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-grid" :disabled="disabledNow || detecting || !cfg.bridgeUrl" @click="doCalibrate">
                   {{ $t("plugins.duetToolAlign.actions.calibrate") }}
@@ -391,8 +395,12 @@
                 </template>
               </v-tooltip>
             </div>
+            <div v-if="detecting" class="text-caption text-warning mb-2 d-flex align-center ga-1">
+              <v-icon size="14">mdi-alert</v-icon>
+              <span>Stop Detect above first -- Centre & capture datum runs its own detection loop and can't run at the same time as Detect's.</span>
+            </div>
             <div class="d-flex ga-2 flex-wrap align-center mb-3">
-              <v-tooltip location="top" text="Centre the carriage datum target on the crosshair using the camera (its own Detection profile, if set above) and record the converged position -- every tool's offset (T0 included) is measured from this point.">
+              <v-tooltip location="top" :text="detecting ? 'Stop Detect above first -- Centre & capture datum runs its own detection loop, so the two can\'t run at once.' : 'Centre the carriage datum target on the crosshair using the camera (its own Detection profile, if set above) and record the converged position -- every tool\'s offset (T0 included) is measured from this point.'">
                 <template #activator="{ props }">
                   <v-btn v-bind="props" size="small" color="primary" variant="flat" prepend-icon="mdi-image-filter-center-focus"
                          :disabled="disabledNow || detecting || !transform" @click="centreDatum">
@@ -596,8 +604,12 @@
               </v-expansion-panels>
             </details>
 
+            <div v-if="detecting" class="text-caption text-warning mb-2 d-flex align-center ga-1">
+              <v-icon size="14">mdi-alert</v-icon>
+              <span>Stop Detect above before aligning -- it runs its own detection loop and can't run at the same time as Detect's.</span>
+            </div>
             <div class="d-flex ga-2 flex-wrap align-center">
-              <v-tooltip location="top" text="Centre the currently-loaded tool and capture its offset. Does not change tools or travel on its own -- select/load the tool and jog it into frame yourself first.">
+              <v-tooltip location="top" :text="detecting ? 'Stop Detect above first -- Align runs its own detection loop, so the two can\'t run at once.' : 'Centre the currently-loaded tool and capture its offset. Does not change tools or travel on its own -- select/load the tool and jog it into frame yourself first.'">
                 <template #activator="{ props }">
                   <v-btn v-bind="props" size="small" color="primary" variant="flat" prepend-icon="mdi-play"
                          :disabled="disabledNow || detecting || current < 0 || !transform" @click="runFull">
@@ -605,7 +617,7 @@
                   </v-btn>
                 </template>
               </v-tooltip>
-              <v-tooltip location="top" text="Centre the current tool's nozzle on the crosshair and record its position, without applying an offset -- for testing.">
+              <v-tooltip location="top" :text="detecting ? 'Stop Detect above first -- Centre runs its own detection loop, so the two can\'t run at once.' : 'Centre the current tool\'s nozzle on the crosshair and record its position, without applying an offset -- for testing.'">
                 <template #activator="{ props }">
                   <v-btn v-bind="props" size="small" variant="text" prepend-icon="mdi-image-filter-center-focus"
                          :disabled="disabledNow || detecting || current < 0 || !transform" @click="centreCurrent">
