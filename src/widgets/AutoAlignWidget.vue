@@ -1457,7 +1457,19 @@ async function trySettings(settings: DetectionSettings): Promise<boolean> {
   const radii: Array<number> = [];
   for (let i = 0; i < AUTOTUNE_FRAMES; i++) {
     if (aborted) return false;
-    const img = await grabFrame(cfg.bridgeUrl);
+    let img: ImageData;
+    try {
+      img = await grabFrame(cfg.bridgeUrl);
+    } catch (e) {
+      // Unlike detectOnce() (used by Detect/Calibrate/Align), this had no error handling of its
+      // own -- a bad bridge URL or an unreachable camera surfaced as an unhandled promise
+      // rejection instead of a status message. A grab failure here will keep failing for every
+      // remaining attempt too, so stop the whole sweep immediately rather than hammering an
+      // unreachable bridge through the rest of it.
+      aborted = true;
+      setStatus((e as Error).message, "error");
+      return false;
+    }
     const res = await detector.detect(img, detectParams(settings));
     const near = res.circles.filter((c) => Math.hypot(c.x - centre.x, c.y - centre.y) < nearRadius);
     if (near.length === 1) { hits++; radii.push(near[0].r); }
