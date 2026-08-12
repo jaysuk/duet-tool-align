@@ -73,6 +73,10 @@ export interface AutoAlignConfig {
 	safeZ: number | null;
 	/** Use G53 (machine coords) for the travel moves so a mid-calibration tool offset can't shift them. */
 	useG53: boolean;
+	/** Whether Go to camera also moves to the saved cameraZ (after any safeZ lift). Off leaves Z alone
+	 *  entirely past the safeZ lift -- useful when you're focusing manually and don't want every
+	 *  Go to camera to re-drive Z to a stale/wrong saved value. */
+	gotoCameraZ: boolean;
 	/** Feed rates (mm/min). */
 	travelFeed: number;
 	jogFeed: number;
@@ -163,6 +167,7 @@ export function defaultConfig(): AutoAlignConfig {
 		cameraZ: null,
 		safeZ: null,
 		useG53: true,
+		gotoCameraZ: true,
 		travelFeed: 6000,
 		jogFeed: 1200,
 		calibStepMm: 0.5,

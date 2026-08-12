@@ -418,6 +418,12 @@
                             :label="$t('plugins.duetToolAlign.settings.useG53')" class="flex-grow-0" />
                 </template>
               </v-tooltip>
+              <v-tooltip location="top" max-width="320" text="On: Go to camera also drives Z to the saved camera focus height (after any safe-Z lift). Off: only moves X/Y -- Z is left wherever the safe-Z lift put it (or untouched if no safe Z is set) -- useful if you're focusing manually and don't want every Go to camera to re-drive Z to a stale value.">
+                <template #activator="{ props }">
+                  <v-switch v-bind="props" v-model="cfg.gotoCameraZ" density="compact" hide-details color="primary"
+                            :label="$t('plugins.duetToolAlign.settings.gotoCameraZ')" class="flex-grow-0" />
+                </template>
+              </v-tooltip>
             </div>
             <div v-if="centreDatumReason" class="text-caption text-warning mb-2 d-flex align-center ga-1">
               <v-icon size="14">mdi-alert</v-icon>
@@ -564,6 +570,12 @@
                 <template #activator="{ props }">
                   <v-switch v-bind="props" v-model="cfg.useG53" density="compact" hide-details color="primary"
                             :label="$t('plugins.duetToolAlign.settings.useG53')" class="flex-grow-0" />
+                </template>
+              </v-tooltip>
+              <v-tooltip location="top" max-width="320" text="On: Go to camera also drives Z to the saved camera focus height (after any safe-Z lift). Off: only moves X/Y -- Z is left wherever the safe-Z lift put it (or untouched if no safe Z is set) -- useful if you're focusing manually and don't want every Go to camera to re-drive Z to a stale value.">
+                <template #activator="{ props }">
+                  <v-switch v-bind="props" v-model="cfg.gotoCameraZ" density="compact" hide-details color="primary"
+                            :label="$t('plugins.duetToolAlign.settings.gotoCameraZ')" class="flex-grow-0" />
                 </template>
               </v-tooltip>
               <v-tooltip location="top" text="Continuously detect without moving anything -- confirm the lock before aligning. Uses whichever profile the loaded tool resolves to.">
@@ -1040,8 +1052,18 @@ interface RawAxis { letter?: string; homed?: boolean; machinePosition?: number |
 const tools = computed<Array<{ number: number; name: string }>>(() => {
   const arr = resolveOmPath(machineStore.model, "tools");
   if (!Array.isArray(arr)) return [];
-  return (arr as Array<RawTool | null>).filter((t): t is RawTool => t != null)
-    .map((t) => ({ number: t.number ?? 0, name: t.name ?? "" }));
+  // DWC's object-model arrays are a ModelCollection (extends Array) that doesn't override
+  // Symbol.species, so .filter()/.map() on one don't return a plain Array -- they return another
+  // ModelCollection whose internal item-constructor got corrupted to a number by the default
+  // species-construction protocol (`new ModelCollection(derivedLength)`). That's invisible for
+  // read-only use, but the moment anything later does `.push()` on a value derived from this --
+  // however many .filter/.map hops away, e.g. applyAll()'s command list -- it throws "Right-hand
+  // side of 'instanceof' is not an object" and crashes the whole plugin (filed upstream:
+  // https://github.com/Duet3D/ObjectModel/pull/1). Spreading into a literal guarantees a genuine
+  // plain Array here, at the one place `tools` values enter this widget, so nothing downstream has
+  // to know or care about this.
+  return [...(arr as Array<RawTool | null>).filter((t): t is RawTool => t != null)
+    .map((t) => ({ number: t.number ?? 0, name: t.name ?? "" }))];
 });
 const current = computed(() => {
   const n = resolveOmPath(machineStore.model, "state.currentTool");
@@ -1297,7 +1319,7 @@ function gotoCameraCode(): string | null {
   const lines = ["M120", "G90"];
   if (typeof cfg.safeZ === "number") lines.push(`${g}G1 Z${cfg.safeZ} F${cfg.jogFeed}`);
   lines.push(`${g}G1 X${cfg.cameraX} Y${cfg.cameraY} F${cfg.travelFeed}`);
-  if (typeof cfg.cameraZ === "number") lines.push(`${g}G1 Z${cfg.cameraZ} F${cfg.jogFeed}`);
+  if (cfg.gotoCameraZ && typeof cfg.cameraZ === "number") lines.push(`${g}G1 Z${cfg.cameraZ} F${cfg.jogFeed}`);
   lines.push("M121", "M400");
   return lines.join("\n");
 }
