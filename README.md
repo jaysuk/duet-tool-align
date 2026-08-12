@@ -12,10 +12,19 @@ nozzle tip, jogs each tool over the lens, and computes the per-tool `G10 X/Y` of
 
 ## How it works
 
-- **Frames** come from [duet-webcam-bridge](https://github.com/jaysuk/duet-webcam-bridge) (v0.5+,
-  which adds CORS headers so the browser can read camera pixels, and serves the OpenCV.js runtime at
-  `/opencv/`). Point the plugin at the bridge URL in its settings.
-- **Detection** runs OpenCV.js entirely in the browser — no second service to install.
+- **Frames** come from an upward-facing camera server on your network — pick whichever suits your
+  build:
+  - **USB webcam or USB microscope**, via [duet-webcam-bridge](https://github.com/jaysuk/duet-webcam-bridge)
+    (v0.5+, adds the CORS headers the browser needs to read camera pixels). Runs on a PC/Raspberry Pi
+    plugged into the camera.
+  - **A dedicated ESP32-S3 camera board with an OV3660 sensor**, running the author's own firmware:
+    [M5Stack-Unit-CamS3-5MP](https://github.com/jaysuk/M5Stack-Unit-CamS3-5MP) (OV3660/generic
+    ESP32-S3-CAM board profile). No PC required — point the plugin straight at the board's IP.
+
+  Either way, all the plugin needs from it is a CORS-enabled `/snapshot` and `/stream` on the same
+  origin/port. Point the plugin at that base URL in its settings.
+- **Detection** runs OpenCV.js entirely in the browser (bundled with the plugin) — no second service
+  to install, and the camera source doesn't need to host it.
 - **Calibration** jogs a small star of known moves and solves a pixel→mm transform.
 - **Alignment** iteratively centres each nozzle on the crosshair, records the machine XY, and derives
   per-tool offsets from the chosen origin.
@@ -40,13 +49,15 @@ See [docs/usage.md §4–5](docs/usage.md#4-choosing-the-reference-origin) for s
 
 1. Download `DuetToolAlign-<version>.zip` from [Releases](../../releases) (or build it — see below).
 2. In DWC: **Settings → General → Plugins → Install Plugin**, pick the ZIP, accept the prompt, **Start**.
-3. **Reload DWC**, open **Plugins → Tool Align**, set the **camera bridge URL**, set the **camera
-   position**, tune with **Detect**, then **Calibrate** → **Run full alignment**.
+3. **Reload DWC**, open **Plugins → Tool Align**, and work through the 5-step guided flow: set the
+   **camera bridge URL**, choose your **Reference**, **Calibrate** (with Detect/Auto-tune to get a
+   clean lock first), **Align** each tool, then **Review & save**.
 
-Requires **[duet-webcam-bridge](https://github.com/jaysuk/duet-webcam-bridge) ≥ 0.5.1** (camera CORS +
-the OpenCV.js runtime at `/opencv/`). It's also exposed as an **embeddable component**, so if
-[Flexible Layouts](https://github.com/jaysuk/Flexible-Layouts) is installed you can drop the
-*Auto Tool Align* panel straight into a grid.
+Requires a camera source reachable from the browser — **[duet-webcam-bridge](https://github.com/jaysuk/duet-webcam-bridge) ≥ 0.5.1**
+for a USB webcam/microscope, or an **[ESP32-S3 + OV3660 board running the author's firmware](https://github.com/jaysuk/M5Stack-Unit-CamS3-5MP)**
+for a standalone camera with no PC needed — see [docs/usage.md §1](docs/usage.md#1-requirements). It's
+also exposed as an **embeddable component**, so if [Flexible Layouts](https://github.com/jaysuk/Flexible-Layouts)
+is installed you can drop the *Auto Tool Align* panel straight into a grid.
 
 ## Releasing
 
@@ -57,11 +68,11 @@ unified update popup via the shared `dwc-plugin-runtime` hub).
 
 ## Status
 
-The pure CV/calibration/control maths and the motion/G-code orchestration are unit-tested
-(`npm test`). Single-tool detection/calibration/centring is exercisable on hardware; multi-tool
-sequences await a multi-tool machine. This started as a standalone plugin and is intended to fold into
-Flexible Layouts once proven — the offset maths (`src/util/toolAlign.ts`) is copied verbatim from FL
-to keep that merge trivial.
+**v1.0.0** — the pure CV/calibration/control maths and the motion/G-code orchestration are unit-tested
+(`npm test`), and the full guided flow (detect, calibrate, both reference workflows, multi-tool
+alignment, review/apply/save) has been exercised end-to-end on real toolchanger hardware. This started
+as a standalone plugin and is intended to fold into Flexible Layouts once proven — the offset maths
+(`src/util/toolAlign.ts`) is copied verbatim from FL to keep that merge trivial.
 
 ## Building
 
