@@ -412,6 +412,12 @@
                   </v-btn>
                 </template>
               </v-tooltip>
+              <v-tooltip location="top" max-width="320" text="On: Go to camera always returns to the exact saved machine position (G53), regardless of the loaded tool's offset -- reliable even mid-calibration when offsets aren't set yet. Off: moves in the loaded tool's offset-compensated coordinates, so that tool's nozzle lands over the camera instead of the bare carriage.">
+                <template #activator="{ props }">
+                  <v-switch v-bind="props" v-model="cfg.useG53" density="compact" hide-details color="primary"
+                            :label="$t('plugins.duetToolAlign.settings.useG53')" class="flex-grow-0" />
+                </template>
+              </v-tooltip>
             </div>
             <div v-if="centreDatumReason" class="text-caption text-warning mb-2 d-flex align-center ga-1">
               <v-icon size="14">mdi-alert</v-icon>
@@ -552,6 +558,12 @@
                   <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-camera-marker" :disabled="disabledNow || !hasCameraPos" @click="gotoCamera">
                     {{ $t("plugins.duetToolAlign.camera.goto") }}
                   </v-btn>
+                </template>
+              </v-tooltip>
+              <v-tooltip location="top" max-width="320" text="On: Go to camera always returns to the exact saved machine position (G53), regardless of the loaded tool's offset -- reliable even mid-calibration when offsets aren't set yet. Off: moves in the loaded tool's offset-compensated coordinates, so that tool's nozzle lands over the camera instead of the bare carriage.">
+                <template #activator="{ props }">
+                  <v-switch v-bind="props" v-model="cfg.useG53" density="compact" hide-details color="primary"
+                            :label="$t('plugins.duetToolAlign.settings.useG53')" class="flex-grow-0" />
                 </template>
               </v-tooltip>
               <v-tooltip location="top" text="Continuously detect without moving anything -- confirm the lock before aligning. Uses whichever profile the loaded tool resolves to.">
