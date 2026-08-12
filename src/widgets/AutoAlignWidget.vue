@@ -774,8 +774,8 @@
                     <template #append-inner><HelpTip text="Sent once, right after Align loaded tool's centring move completes for that tool." /></template>
                   </v-text-field>
                   <v-text-field v-model="cfg.saveCommand" density="compact" variant="outlined" hide-details
-                                :label="$t('plugins.duetToolAlign.settings.saveCommand')" placeholder="e.g. M500">
-                    <template #append-inner><HelpTip text="Sent by the Save button, and appended to Apply all. Clear it to hide the Save button. (default: M500)" /></template>
+                                :label="$t('plugins.duetToolAlign.settings.saveCommand')" placeholder="e.g. M500 P10">
+                    <template #append-inner><HelpTip text="Sent by the Save button, and appended to Apply all. Clear it to hide the Save button. Needs the P10 parameter -- plain M500 does not save G10 tool offsets in RRF. (default: M500 P10)" /></template>
                   </v-text-field>
                 </div>
               </v-expansion-panel-text>

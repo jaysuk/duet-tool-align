@@ -140,7 +140,10 @@ export interface AutoAlignConfig {
 	/** X/Y manual jog step, in mm (the X/Y jog buttons for bringing a tool into frame). */
 	xyStep: number;
 
-	/** Optional macros run at the start/finish of a full alignment run, and to persist offsets. */
+	/** Optional macros run at the start/finish of a full alignment run, and to persist offsets. Plain
+	 *  M500 does NOT save G10 tool offsets -- RRF only stores them with the P10 parameter (see
+	 *  https://github.com/Duet3D/wiki-content, User_manual/Reference/Gcodes.md, M500) -- so this
+	 *  needs "M500 P10", not bare "M500", or the Save button silently doesn't persist anything. */
 	startCommand: string;
 	finishCommand: string;
 	saveCommand: string;
@@ -195,7 +198,7 @@ export function defaultConfig(): AutoAlignConfig {
 		xyStep: 0.1,
 		startCommand: "",
 		finishCommand: "",
-		saveCommand: "M500",
+		saveCommand: "M500 P10",
 		cameraRigid: false,
 		transform: null,
 	};
@@ -238,6 +241,13 @@ export function useConfig(): AutoAlignConfig {
 		const cfg = container.config as Record<string, unknown>;
 		for (const [k, v] of Object.entries(defaults)) {
 			if (!(k in cfg)) cfg[k] = v;
+		}
+		// One-time migration: earlier versions defaulted saveCommand to plain "M500", which RRF
+		// silently does NOT save G10 tool offsets with (needs the P10 parameter -- see saveCommand's
+		// doc comment above). Only touches the exact old default, so a deliberately-customised
+		// saveCommand (even something as simple as "M500 P31") is left alone.
+		if (cfg.saveCommand === "M500") {
+			cfg.saveCommand = "M500 P10";
 		}
 	}
 	return container.config as AutoAlignConfig;

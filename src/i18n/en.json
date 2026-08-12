@@ -86,7 +86,7 @@
 		"offset": "Offset X,Y",
 		"apply": "Apply",
 		"applyAll": "Apply all",
-		"save": "Save (M500)",
+		"save": "Save (M500 P10)",
 		"invert": "Invert offsets",
 		"refBadge": "ref",
 		"setRef": "Set reference",
