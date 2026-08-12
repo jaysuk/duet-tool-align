@@ -805,7 +805,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
 import { HelpTip } from "dwc-plugin-runtime";
 
 import i18n from "@/i18n";
@@ -815,6 +815,7 @@ import { LogLevel, useUiStore } from "@/stores/ui";
 import { type AxisCapture, computeToolOffset, formatG10, type ToolOffset } from "../util/toolAlign";
 import { resolveOmPath } from "../util/omPath";
 import { type AutoAlignConfig, type DetectionSettings, defaultConfig, resolveOpencvUrl, useConfig } from "../model/document";
+import { PLUGIN_ID } from "../model/constants";
 import { type DetectParams, pickLargest, pickNearestToCentre } from "../cv/detectNozzle";
 import { WorkerDetector } from "../cv/detectorWorker";
 import { grabFrame } from "../cv/frameGrabber";
@@ -1258,12 +1259,44 @@ function frameCentre(): Vec2 {
   return { x: (frameW.value || 640) / 2, y: (frameH.value || 480) / 2 };
 }
 
+// This widget fully unmounts when you navigate to a different DWC page (see onBeforeUnmount below,
+// which deliberately tears down the CV detector to free resources) and gets a fresh instance when
+// you navigate back -- so a plain ref() for anything you don't want to lose by glancing at another
+// page doesn't survive that trip. sessionStorage does: it survives SPA navigation and even a page
+// reload within the same browser tab, but -- unlike cfg, which is saved to the board -- clears when
+// the tab closes, so it can't resurrect stale captures/calibration in some unrelated future session
+// (a real concern here: these positions/this calibration can go stale if the machine gets rehomed
+// or moved in the meantime).
+function sessionRef<T>(key: string, fallback: T): Ref<T> {
+  const storageKey = `${PLUGIN_ID}.${key}`;
+  let initial = fallback;
+  try {
+    const raw = sessionStorage.getItem(storageKey);
+    if (raw != null) initial = JSON.parse(raw) as T;
+  } catch {
+    // Corrupt or unavailable storage -- fall back to the default, same as a fresh session.
+  }
+  const r = ref(initial) as Ref<T>;
+  watch(r, (v) => {
+    try {
+      if (v == null) sessionStorage.removeItem(storageKey);
+      else sessionStorage.setItem(storageKey, JSON.stringify(v));
+    } catch {
+      // Storage full/unavailable -- state still works for the rest of this session, it just won't
+      // survive navigating away and back.
+    }
+  }, { deep: true });
+  return r;
+}
+
 // --- Alignment state -----------------------------------------------------------
 // Backed by cfg.transform (persisted) when cfg.cameraRigid is set -- a rigidly-mounted camera's
 // pixel-to-mm calibration doesn't change between page reloads, so there's no reason to force
-// re-running Calibrate every session. Otherwise falls back to a local-only ref: a handheld/removable
-// camera's calibration isn't guaranteed to still be valid next session, so it isn't persisted.
-const sessionTransform = ref<Mat2 | null>(null);
+// re-running Calibrate every session. Otherwise falls back to a session-only ref (see sessionRef
+// above): a handheld/removable camera's calibration isn't guaranteed to still be valid next
+// *browser session*, so it isn't saved to the board -- but it does survive navigating away and back
+// within this one.
+const sessionTransform = sessionRef<Mat2 | null>("transform", null);
 const transform = computed<Mat2 | null>({
   get: () => (cfg.cameraRigid ? cfg.transform : sessionTransform.value),
   set: (v) => { if (cfg.cameraRigid) cfg.transform = v; else sessionTransform.value = v; },
@@ -1281,9 +1314,9 @@ function setCameraRigid(rigid: boolean): void {
     cfg.transform = null;
   }
 }
-const captures = ref<Record<number, AxisCapture>>({});
+const captures = sessionRef<Record<number, AxisCapture>>("captures", {});
 // Captured carriage datum (referenceMode = "point"): the 0,0 every tool is offset from.
-const refPoint = ref<{ x: number; y: number } | null>(null);
+const refPoint = sessionRef<{ x: number; y: number } | null>("refPoint", null);
 const busy = ref(false);
 let aborted = false;
 
