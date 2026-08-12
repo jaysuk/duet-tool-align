@@ -21,6 +21,15 @@
       </template>
     </v-alert>
 
+    <!-- Persistent "what to click next" banner -- one line, always accurate for whichever step is
+         active, so the guidance that used to be scattered across body text/tooltips is always visible
+         without having to go looking for it. -->
+    <div class="aa-next-action px-3 py-2 flex-shrink-0 d-flex align-center ga-2" :class="{ 'aa-next-action-done': nextAction.done }">
+      <span class="aa-next-dot" />
+      <span class="text-caption text-medium-emphasis text-uppercase aa-next-label">Next</span>
+      <span class="text-caption">{{ nextAction.text }}</span>
+    </div>
+
     <div class="aa-main flex-grow-1 d-flex">
     <!-- Camera with crosshair + detected-circle overlay -- persistent across every step, like the
          chart in Closed Loop Tuning stays visible under whichever step is active. -->
@@ -185,284 +194,257 @@
       <!-- 3. Calibrate -->
       <template #item.3>
         <v-card flat>
-          <div class="text-body-2 mb-3">Work through this in order: get a clean detection lock, calibrate,
-            then (if you're using a carriage datum) centre and capture it, and finally save the camera position.</div>
+          <div class="text-body-2 mb-3">Work through the checklist below in order -- only the current step is expanded; finished ones collapse to a summary you can still reopen.</div>
 
-          <div class="text-subtitle-2 mt-1 mb-1">1. Detect &amp; tune</div>
-          <div class="text-caption text-medium-emphasis mb-2">Jog whatever's under the lens into frame and focus, then use Detect to check the lock.
-            If a carriage datum is unloaded and in frame, its profile is selected below automatically -- otherwise Centre &amp; capture datum will fail against the wrong settings.</div>
-          <div class="d-flex flex-wrap align-center ga-3 mb-2">
-            <div class="d-flex align-center ga-1 aa-jog-group">
-              <span class="text-caption text-medium-emphasis mr-1">XY</span>
-              <v-tooltip location="top" text="Jog X by the step size, to bring the tool's nozzle into frame.">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('X', -1)">X−</v-btn>
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" text="Jog X by the step size, to bring the tool's nozzle into frame.">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('X', 1)">X+</v-btn>
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" text="Jog Y by the step size, to bring the tool's nozzle into frame.">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('Y', -1)">Y−</v-btn>
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" text="Jog Y by the step size, to bring the tool's nozzle into frame.">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('Y', 1)">Y+</v-btn>
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" max-width="280" text="X/Y jog distance per button press (mm). Use a big step to bring a far-off tool into frame, then a small step to fine-tune. (default: 0.1)">
-                <template #activator="{ props }">
-                  <v-text-field v-bind="props" v-model.number="cfg.xyStep" type="number" min="0.01" max="50" step="0.05" label="XY step"
-                                density="compact" variant="outlined" hide-details class="aa-step-field" suffix="mm" />
-                </template>
-              </v-tooltip>
-            </div>
-            <v-divider vertical class="aa-jog-divider" />
-            <div class="d-flex align-center ga-1 aa-jog-group">
-              <span class="text-caption text-medium-emphasis mr-1">Z</span>
-              <v-tooltip location="top" text="Jog Z down by the step size, to bring the nozzle into focus.">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(-1)">Z−</v-btn>
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" text="Jog Z up by the step size, to bring the nozzle into focus.">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(1)">Z+</v-btn>
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" max-width="280" text="Z distance per -Z/+Z press (mm), to bring the nozzle into focus. Typical 0.02–0.2. (default: 0.05)">
-                <template #activator="{ props }">
-                  <v-text-field v-bind="props" v-model.number="cfg.zStep" type="number" min="0.01" max="2" step="0.01" label="Z step"
-                                density="compact" variant="outlined" hide-details class="aa-step-field" suffix="mm" />
-                </template>
-              </v-tooltip>
-            </div>
-          </div>
+          <JogCameraStrip :disabled="disabledNow" @jog-xy="jogXY" @jog-z="focusZ" @goto-camera="gotoCamera" />
 
-          <div class="d-flex flex-wrap align-center ga-1 mb-2">
-            <v-tooltip location="top" text="Continuously detect without moving anything, using whichever profile is selected below -- use this to check the lock against the live image, including for a tool/datum that isn't currently loaded.">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" size="small" :variant="detecting ? 'flat' : 'tonal'" :color="detecting ? 'primary' : undefined"
-                       prepend-icon="mdi-eye" :disabled="busy || !cfg.bridgeUrl" @click="toggleDetect">
-                  {{ detecting ? $t("plugins.duetToolAlign.actions.stopDetect") : $t("plugins.duetToolAlign.actions.detect") }}
-                </v-btn>
-              </template>
-            </v-tooltip>
-            <v-tooltip location="top" max-width="260"
-                       text="Show a pixel ruler over the camera image (rings every so many px, plus the current Min/Max radius settings) -- to estimate how many pixels wide something is. On by default.">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" size="small" :variant="showScale ? 'flat' : 'tonal'" :color="showScale ? 'primary' : undefined"
-                       icon="mdi-ruler" :disabled="!cfg.bridgeUrl" @click="showScale = !showScale" />
-              </template>
-            </v-tooltip>
-            <v-tooltip location="top" max-width="260"
-                       text="Measure between two points on the image (px, and mm once calibrated). Right-click the image to arm/disarm, or use this button; then click two points. A third click starts a new measurement.">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" size="small" :variant="measuring ? 'flat' : 'tonal'" :color="measuring ? 'primary' : undefined"
-                       icon="mdi-map-marker-distance" :disabled="!cfg.bridgeUrl" @click="toggleMeasure" />
-              </template>
-            </v-tooltip>
-          </div>
-          <v-tooltip v-if="lastSharpness != null" location="top"
-                     text="Focus assist: how sharp the last frame was, relative to the best seen since Detect was (re)started. Jog Z to climb toward 100%; it resets each time you start Detect.">
-            <template #activator="{ props }">
-              <div v-bind="props" class="aa-focusbar d-flex align-center ga-2 mb-2">
-                <span class="text-caption text-medium-emphasis">{{ $t("plugins.duetToolAlign.focus.assist") }}</span>
-                <v-progress-linear :model-value="focusPct" height="6" rounded color="primary" class="aa-focusbar-bar" />
-                <span class="text-caption text-medium-emphasis aa-num">{{ focusPct.toFixed(0) }}%</span>
-              </div>
-            </template>
-          </v-tooltip>
-
-          <div class="d-flex ga-2 flex-wrap align-center mb-2">
-            <v-select v-model="editingProfileKey" :items="profileOptions" item-title="title" item-value="value"
-                      density="compact" variant="outlined" hide-details class="aa-select"
-                      :label="$t('plugins.duetToolAlign.settings.profile')">
-              <template #append-inner><HelpTip text="Detect/Ruler above, and Auto-detect below, act on this profile. Automatically follows the carriage datum when it's unloaded and in frame (Reference = Carriage datum), or a tool while you're aligning it in step 4 -- change it here to check/tune a different one." /></template>
-            </v-select>
-            <v-tooltip v-if="editingProfileKey" location="top" max-width="300" text="Give this profile its own Detection settings, starting from the current Global values. Untick to delete the override and go back to following Global.">
-              <template #activator="{ props }">
-                <v-switch v-bind="props" :model-value="hasOverride" density="compact" hide-details color="primary"
-                          :label="$t('plugins.duetToolAlign.settings.useCustom')" @update:model-value="toggleOverride" />
-              </template>
-            </v-tooltip>
-          </div>
-
-          <v-expansion-panels variant="accordion" class="mb-3">
+          <v-expansion-panels v-model="openPanel3" variant="accordion" class="aa-checklist">
+            <!-- 1. Detect & tune (includes the optional radius/sensitivity helper) -->
             <v-expansion-panel>
               <v-expansion-panel-title>
-                Advanced: detection tuning
-                <v-spacer />
-                <v-tooltip location="top" text="Reset every Detection setting below (for whichever profile is selected above) back to its default value.">
-                  <template #activator="{ props }">
-                    <v-btn v-bind="props" size="x-small" variant="text" prepend-icon="mdi-restore" class="mr-2" :disabled="editingLocked" @click.stop="resetDetectionDefaults">
-                      {{ $t("plugins.duetToolAlign.settings.resetDetection") }}
-                    </v-btn>
-                  </template>
-                </v-tooltip>
+                <span class="aa-cl-num" :class="{ 'aa-cl-num-done': panel3Done.detect }">
+                  <v-icon v-if="panel3Done.detect" size="14">mdi-check</v-icon><template v-else>{{ panel3Num('detect') }}</template>
+                </span>
+                <span class="aa-cl-title" :class="{ 'text-medium-emphasis': panel3Done.detect }">Detect &amp; tune</span>
+                <span v-if="panel3Done.detect" class="text-caption text-medium-emphasis aa-num mr-2">{{ panel3Summary.detect }}</span>
               </v-expansion-panel-title>
               <v-expansion-panel-text>
-                <div class="d-flex ga-2 flex-wrap align-center mb-2">
-                  <v-select v-model="activeDetector" :items="detectorItems" item-title="title" item-value="value"
-                            density="compact" variant="outlined" hide-details class="aa-select" :disabled="editingLocked"
-                            :label="$t('plugins.duetToolAlign.settings.detector')" />
-                  <v-tooltip location="top" max-width="300" text="Pick the largest detected circle instead of the one nearest the crosshair. Handy while the nozzle is off-centre during tuning; turn off for centring. (default: off)">
+                <div class="text-caption text-medium-emphasis mb-2">Jog whatever's under the lens into frame and focus, then use Detect to check the lock.
+                  If a carriage datum is unloaded and in frame, its profile is selected below automatically -- otherwise Centre &amp; capture datum will fail against the wrong settings.</div>
+
+                <div class="d-flex flex-wrap align-center ga-1 mb-2">
+                  <v-tooltip location="top" text="Continuously detect without moving anything, using whichever profile is selected below -- use this to check the lock against the live image, including for a tool/datum that isn't currently loaded.">
                     <template #activator="{ props }">
-                      <v-switch v-bind="props" v-model="activePickLargest" density="compact" hide-details color="primary" :disabled="editingLocked"
-                                :label="$t('plugins.duetToolAlign.settings.pickLargest')" />
+                      <v-btn v-bind="props" size="small" :variant="detecting ? 'flat' : 'tonal'" :color="detecting ? 'primary' : undefined"
+                             prepend-icon="mdi-eye" :disabled="busy || !cfg.bridgeUrl" @click="toggleDetect">
+                        {{ detecting ? $t("plugins.duetToolAlign.actions.stopDetect") : $t("plugins.duetToolAlign.actions.detect") }}
+                      </v-btn>
                     </template>
                   </v-tooltip>
-                  <v-tooltip v-if="activeDetector === 'contour'" location="top" max-width="300" text="The bore is darker than the nozzle, so threshold keeps the dark pixels. Turn off only if your target is brighter than its surroundings. (default: on)">
+                  <v-tooltip location="top" max-width="260"
+                             text="Show a pixel ruler over the camera image (rings every so many px, plus the current Min/Max radius settings) -- to estimate how many pixels wide something is. On by default.">
                     <template #activator="{ props }">
-                      <v-switch v-bind="props" v-model="activeDarkBore" density="compact" hide-details color="primary" :disabled="editingLocked"
-                                :label="$t('plugins.duetToolAlign.settings.darkBore')" />
+                      <v-btn v-bind="props" size="small" :variant="showScale ? 'flat' : 'tonal'" :color="showScale ? 'primary' : undefined"
+                             icon="mdi-ruler" :disabled="!cfg.bridgeUrl" @click="showScale = !showScale" />
+                    </template>
+                  </v-tooltip>
+                  <v-tooltip location="top" max-width="260"
+                             text="Measure between two points on the image (px, and mm once calibrated). Right-click the image to arm/disarm, or use this button; then click two points. A third click starts a new measurement.">
+                    <template #activator="{ props }">
+                      <v-btn v-bind="props" size="small" :variant="measuring ? 'flat' : 'tonal'" :color="measuring ? 'primary' : undefined"
+                             icon="mdi-map-marker-distance" :disabled="!cfg.bridgeUrl" @click="toggleMeasure" />
                     </template>
                   </v-tooltip>
                 </div>
-                <div class="d-flex ga-2 flex-wrap align-center">
-                  <v-text-field v-for="f in activeDetectFields" :key="f.key" :model-value="getDetectNum(f.key)" @update:model-value="setDetectNum(f.key, $event)"
-                                type="number" :min="f.min" :max="f.max" :step="f.step ?? 1" :suffix="f.unit" :disabled="editingLocked"
-                                density="compact" variant="outlined" hide-details class="aa-field"
-                                :label="$t('plugins.duetToolAlign.settings.' + f.key)">
-                    <template #append-inner><HelpTip :text="fieldTip(f)" /></template>
-                  </v-text-field>
+                <v-tooltip v-if="lastSharpness != null" location="top"
+                           text="Focus assist: how sharp the last frame was, relative to the best seen since Detect was (re)started. Jog Z to climb toward 100%; it resets each time you start Detect.">
+                  <template #activator="{ props }">
+                    <div v-bind="props" class="aa-focusbar d-flex align-center ga-2 mb-2">
+                      <span class="text-caption text-medium-emphasis">{{ $t("plugins.duetToolAlign.focus.assist") }}</span>
+                      <v-progress-linear :model-value="focusPct" height="6" rounded color="primary" class="aa-focusbar-bar" />
+                      <span class="text-caption text-medium-emphasis aa-num">{{ focusPct.toFixed(0) }}%</span>
+                    </div>
+                  </template>
+                </v-tooltip>
+
+                <div class="d-flex ga-2 flex-wrap align-center mb-2">
+                  <v-select v-model="editingProfileKey" :items="profileOptions" item-title="title" item-value="value"
+                            density="compact" variant="outlined" hide-details class="aa-select"
+                            :label="$t('plugins.duetToolAlign.settings.profile')">
+                    <template #append-inner><HelpTip text="Detect/Ruler above, and Auto-detect below, act on this profile. Automatically follows the carriage datum when it's unloaded and in frame (Reference = Carriage datum), or a tool while you're aligning it in step 4 -- change it here to check/tune a different one." /></template>
+                  </v-select>
+                  <v-tooltip v-if="editingProfileKey" location="top" max-width="300" text="Give this profile its own Detection settings, starting from the current Global values. Untick to delete the override and go back to following Global.">
+                    <template #activator="{ props }">
+                      <v-switch v-bind="props" :model-value="hasOverride" density="compact" hide-details color="primary"
+                                :label="$t('plugins.duetToolAlign.settings.useCustom')" @update:model-value="toggleOverride" />
+                    </template>
+                  </v-tooltip>
+                </div>
+
+                <v-expansion-panels variant="accordion" class="mb-3">
+                  <v-expansion-panel>
+                    <v-expansion-panel-title>
+                      Advanced: detection tuning
+                      <v-spacer />
+                      <v-tooltip location="top" text="Reset every Detection setting below (for whichever profile is selected above) back to its default value.">
+                        <template #activator="{ props }">
+                          <v-btn v-bind="props" size="x-small" variant="text" prepend-icon="mdi-restore" class="mr-2" :disabled="editingLocked" @click.stop="resetDetectionDefaults">
+                            {{ $t("plugins.duetToolAlign.settings.resetDetection") }}
+                          </v-btn>
+                        </template>
+                      </v-tooltip>
+                    </v-expansion-panel-title>
+                    <v-expansion-panel-text>
+                      <div class="d-flex ga-2 flex-wrap align-center mb-2">
+                        <v-select v-model="activeDetector" :items="detectorItems" item-title="title" item-value="value"
+                                  density="compact" variant="outlined" hide-details class="aa-select" :disabled="editingLocked"
+                                  :label="$t('plugins.duetToolAlign.settings.detector')" />
+                        <v-tooltip location="top" max-width="300" text="Pick the largest detected circle instead of the one nearest the crosshair. Handy while the nozzle is off-centre during tuning; turn off for centring. (default: off)">
+                          <template #activator="{ props }">
+                            <v-switch v-bind="props" v-model="activePickLargest" density="compact" hide-details color="primary" :disabled="editingLocked"
+                                      :label="$t('plugins.duetToolAlign.settings.pickLargest')" />
+                          </template>
+                        </v-tooltip>
+                        <v-tooltip v-if="activeDetector === 'contour'" location="top" max-width="300" text="The bore is darker than the nozzle, so threshold keeps the dark pixels. Turn off only if your target is brighter than its surroundings. (default: on)">
+                          <template #activator="{ props }">
+                            <v-switch v-bind="props" v-model="activeDarkBore" density="compact" hide-details color="primary" :disabled="editingLocked"
+                                      :label="$t('plugins.duetToolAlign.settings.darkBore')" />
+                          </template>
+                        </v-tooltip>
+                      </div>
+                      <div class="d-flex ga-2 flex-wrap align-center">
+                        <v-text-field v-for="f in activeDetectFields" :key="f.key" :model-value="getDetectNum(f.key)" @update:model-value="setDetectNum(f.key, $event)"
+                                      type="number" :min="f.min" :max="f.max" :step="f.step ?? 1" :suffix="f.unit" :disabled="editingLocked"
+                                      density="compact" variant="outlined" hide-details class="aa-field"
+                                      :label="$t('plugins.duetToolAlign.settings.' + f.key)">
+                          <template #append-inner><HelpTip :text="fieldTip(f)" /></template>
+                        </v-text-field>
+                      </div>
+                    </v-expansion-panel-text>
+                  </v-expansion-panel>
+                  <v-expansion-panel title="Advanced: motion & tolerances">
+                    <v-expansion-panel-text>
+                      <div class="d-flex ga-2 flex-wrap align-center">
+                        <v-text-field v-for="f in motionFields" :key="f.key" :model-value="getNum(f.key)" @update:model-value="setNum(f.key, $event)"
+                                      type="number" :min="f.min" :max="f.max" :step="f.step ?? 1" :suffix="f.unit"
+                                      density="compact" variant="outlined" hide-details class="aa-field"
+                                      :label="$t('plugins.duetToolAlign.settings.' + f.key)">
+                          <template #append-inner><HelpTip :text="fieldTip(f)" /></template>
+                        </v-text-field>
+                      </div>
+                    </v-expansion-panel-text>
+                  </v-expansion-panel>
+                </v-expansion-panels>
+
+                <div class="text-caption font-weight-medium mb-1">Radius &amp; sensitivity (optional)</div>
+                <div class="text-caption text-medium-emphasis mb-2">The fastest way to a reliable lock: measure the target's actual size, then let Auto-tune find the right sensitivity for it.</div>
+                <div class="d-flex flex-wrap align-center ga-1">
+                  <v-tooltip location="top" max-width="280"
+                             text="Set Min/Max radius (for the profile selected above) from the last measurement: click across the target's visible diameter with the measure tool, then use this to set a range around half that distance.">
+                    <template #activator="{ props }">
+                      <v-btn v-bind="props" size="small" variant="tonal" icon="mdi-diameter" :disabled="measureDistPx == null" @click="applyMeasuredRadius" />
+                    </template>
+                  </v-tooltip>
+                  <v-tooltip location="top" max-width="280"
+                             text="Auto-tune detection sensitivity for the profile selected above: sweeps from strict to loose, keeping Min/Max radius fixed, and stops at the strictest setting that reliably finds one centred candidate across several frames. Set Min/Max radius correctly first (the ⌀ button, or the Advanced fields above).">
+                    <template #activator="{ props }">
+                      <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-auto-fix" :disabled="busy || detecting || !cfg.bridgeUrl" @click="autoTune">
+                        {{ $t("plugins.duetToolAlign.autotune.button") }}
+                      </v-btn>
+                    </template>
+                  </v-tooltip>
                 </div>
               </v-expansion-panel-text>
             </v-expansion-panel>
-            <v-expansion-panel title="Advanced: motion & tolerances">
+
+            <!-- 2. Calibrate -->
+            <v-expansion-panel>
+              <v-expansion-panel-title>
+                <span class="aa-cl-num" :class="{ 'aa-cl-num-done': panel3Done.calibrate }">
+                  <v-icon v-if="panel3Done.calibrate" size="14">mdi-check</v-icon><template v-else>{{ panel3Num('calibrate') }}</template>
+                </span>
+                <span class="aa-cl-title" :class="{ 'text-medium-emphasis': panel3Done.calibrate }">Calibrate</span>
+                <span v-if="panel3Done.calibrate" class="text-caption text-medium-emphasis aa-num mr-2">{{ panel3Summary.calibrate }}</span>
+              </v-expansion-panel-title>
               <v-expansion-panel-text>
+                <div class="d-flex align-center mb-2">
+                  <v-checkbox
+                    :model-value="cfg.cameraRigid"
+                    label="Camera is rigidly mounted to the machine"
+                    density="compact"
+                    hide-details
+                    class="flex-grow-0"
+                    @update:model-value="(v) => setCameraRigid(!!v)"
+                  />
+                  <HelpTip text="On: the calibration below is saved and reused after a page reload, since a fixed camera's pixel-to-mm relationship doesn't change on its own. Off (default): calibration is kept for this session only and cleared on reload, since a handheld/removable camera can't be assumed to still be in the same spot next time." />
+                </div>
+                <div v-if="doCalibrateReason" class="text-caption text-warning mb-2 d-flex align-center ga-1">
+                  <v-icon size="14">mdi-alert</v-icon>
+                  <span>{{ doCalibrateReason }}</span>
+                </div>
                 <div class="d-flex ga-2 flex-wrap align-center">
-                  <v-text-field v-for="f in motionFields" :key="f.key" :model-value="getNum(f.key)" @update:model-value="setNum(f.key, $event)"
-                                type="number" :min="f.min" :max="f.max" :step="f.step ?? 1" :suffix="f.unit"
-                                density="compact" variant="outlined" hide-details class="aa-field"
-                                :label="$t('plugins.duetToolAlign.settings.' + f.key)">
-                    <template #append-inner><HelpTip :text="fieldTip(f)" /></template>
-                  </v-text-field>
+                  <v-tooltip location="top" :text="doCalibrateReason ?? 'Jog a small star pattern from the current position and solve the pixel-to-mm transform. Run once per camera position/zoom -- not per tool.'">
+                    <template #activator="{ props }">
+                      <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-grid" :disabled="disabledNow || detecting || !cfg.bridgeUrl" @click="doCalibrate">
+                        {{ $t("plugins.duetToolAlign.actions.calibrate") }}
+                      </v-btn>
+                    </template>
+                  </v-tooltip>
+                  <span v-if="transform" class="text-caption" style="color: rgb(var(--v-theme-success));">
+                    <v-icon size="14" class="mr-1">mdi-check-circle</v-icon>Calibrated<span v-if="calibResult">: {{ calibResult }}</span><span v-else class="text-medium-emphasis"> (from a previous session -- re-run if the camera's moved)</span>
+                  </span>
+                </div>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+
+            <!-- 3. Centre & capture the carriage datum (point reference mode only) -->
+            <v-expansion-panel v-if="cfg.referenceMode === 'point'">
+              <v-expansion-panel-title>
+                <span class="aa-cl-num" :class="{ 'aa-cl-num-done': panel3Done.datum }">
+                  <v-icon v-if="panel3Done.datum" size="14">mdi-check</v-icon><template v-else>{{ panel3Num('datum') }}</template>
+                </span>
+                <span class="aa-cl-title" :class="{ 'text-medium-emphasis': panel3Done.datum }">Centre &amp; capture the carriage datum</span>
+                <span v-if="panel3Done.datum" class="text-caption text-medium-emphasis aa-num mr-2">{{ panel3Summary.datum }}</span>
+              </v-expansion-panel-title>
+              <v-expansion-panel-text>
+                <div v-if="centreDatumReason" class="text-caption text-warning mb-2 d-flex align-center ga-1">
+                  <v-icon size="14">mdi-alert</v-icon>
+                  <span>{{ centreDatumReason }}</span>
+                </div>
+                <div class="d-flex ga-2 flex-wrap align-center">
+                  <v-tooltip location="top" text="Unload the active tool (sends T-1) so the bare carriage/datum feature is what's over the lens.">
+                    <template #activator="{ props }">
+                      <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-eject" :disabled="disabledNow" @click="unloadTool">
+                        {{ $t("plugins.duetToolAlign.tools.unload") }}
+                      </v-btn>
+                    </template>
+                  </v-tooltip>
+                  <v-tooltip location="top" :text="centreDatumReason ?? 'Centre the carriage datum target on the crosshair using the camera (its own Detection profile, if set above) and record the converged position -- every tool\'s offset (T0 included) is measured from this point.'">
+                    <template #activator="{ props }">
+                      <v-btn v-bind="props" size="small" color="primary" variant="flat" prepend-icon="mdi-image-filter-center-focus"
+                             :disabled="disabledNow || detecting || !transform" @click="centreDatum">
+                        {{ $t("plugins.duetToolAlign.offsets.centreDatum") }}
+                      </v-btn>
+                    </template>
+                  </v-tooltip>
+                  <v-tooltip location="top" text="Manually record the current machine XY as the carriage datum, without camera assistance -- use this if the datum target isn't something the camera can detect. Jog the switch/feature onto the crosshair first.">
+                    <template #activator="{ props }">
+                      <v-btn v-bind="props" size="small" variant="text" prepend-icon="mdi-crosshairs-gps" :disabled="disabledNow" @click="captureRefPoint">
+                        {{ $t("plugins.duetToolAlign.offsets.captureDatum") }}
+                      </v-btn>
+                    </template>
+                  </v-tooltip>
+                  <span class="text-caption text-medium-emphasis aa-num">
+                    {{ $t("plugins.duetToolAlign.offsets.datum") }}: {{ refPoint ? refPoint.x.toFixed(2) + ", " + refPoint.y.toFixed(2) : "—" }}
+                  </span>
+                </div>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+
+            <!-- 4. Set camera position -->
+            <v-expansion-panel>
+              <v-expansion-panel-title>
+                <span class="aa-cl-num" :class="{ 'aa-cl-num-done': panel3Done.camera }">
+                  <v-icon v-if="panel3Done.camera" size="14">mdi-check</v-icon><template v-else>{{ panel3Num('camera') }}</template>
+                </span>
+                <span class="aa-cl-title" :class="{ 'text-medium-emphasis': panel3Done.camera }">Set camera position</span>
+                <span v-if="panel3Done.camera" class="text-caption text-medium-emphasis aa-num mr-2">{{ panel3Summary.camera }}</span>
+              </v-expansion-panel-title>
+              <v-expansion-panel-text>
+                <div class="text-caption text-medium-emphasis mb-2">Save the position you're sitting at right now as "the camera position", for Go to camera on every later tool change. Do this last -- once centred on a tool or the datum, that's a more precise spot to remember than wherever you started jogging from.</div>
+                <div class="d-flex ga-2 flex-wrap align-center">
+                  <v-tooltip location="top" text="Save the current machine position as the camera position, for 'Go to camera' and every tool change from here on.">
+                    <template #activator="{ props }">
+                      <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-crosshairs" :disabled="disabledNow" @click="setCamera">
+                        {{ $t("plugins.duetToolAlign.camera.set") }}
+                      </v-btn>
+                    </template>
+                  </v-tooltip>
+                  <span v-if="hasCameraPos" class="text-caption text-medium-emphasis aa-num">Saved: {{ fmtPos(cfg.cameraX) }}, {{ fmtPos(cfg.cameraY) }}</span>
                 </div>
               </v-expansion-panel-text>
             </v-expansion-panel>
           </v-expansion-panels>
-
-          <div class="text-subtitle-2 mt-2 mb-1">2. Auto-detect radius &amp; sensitivity</div>
-          <div class="text-caption text-medium-emphasis mb-2">Optional, but the fastest way to a reliable lock: measure the target's actual size, then let Auto-tune find the right sensitivity for it.</div>
-          <div class="d-flex flex-wrap align-center ga-1 mb-3">
-            <v-tooltip location="top" max-width="280"
-                       text="Set Min/Max radius (for the profile selected above) from the last measurement: click across the target's visible diameter with the measure tool, then use this to set a range around half that distance.">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" size="small" variant="tonal" icon="mdi-diameter" :disabled="measureDistPx == null" @click="applyMeasuredRadius" />
-              </template>
-            </v-tooltip>
-            <v-tooltip location="top" max-width="280"
-                       text="Auto-tune detection sensitivity for the profile selected above: sweeps from strict to loose, keeping Min/Max radius fixed, and stops at the strictest setting that reliably finds one centred candidate across several frames. Set Min/Max radius correctly first (the ⌀ button, or the Advanced fields above).">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-auto-fix" :disabled="busy || detecting || !cfg.bridgeUrl" @click="autoTune">
-                  {{ $t("plugins.duetToolAlign.autotune.button") }}
-                </v-btn>
-              </template>
-            </v-tooltip>
-          </div>
-
-          <div class="text-subtitle-2 mb-1">3. Calibrate</div>
-          <div class="d-flex align-center mb-2">
-            <v-checkbox
-              :model-value="cfg.cameraRigid"
-              label="Camera is rigidly mounted to the machine"
-              density="compact"
-              hide-details
-              class="flex-grow-0"
-              @update:model-value="(v) => setCameraRigid(!!v)"
-            />
-            <HelpTip text="On: the calibration below is saved and reused after a page reload, since a fixed camera's pixel-to-mm relationship doesn't change on its own. Off (default): calibration is kept for this session only and cleared on reload, since a handheld/removable camera can't be assumed to still be in the same spot next time." />
-          </div>
-          <div v-if="doCalibrateReason" class="text-caption text-warning mb-2 d-flex align-center ga-1">
-            <v-icon size="14">mdi-alert</v-icon>
-            <span>{{ doCalibrateReason }}</span>
-          </div>
-          <div class="d-flex ga-2 flex-wrap align-center mb-3">
-            <v-tooltip location="top" :text="doCalibrateReason ?? 'Jog a small star pattern from the current position and solve the pixel-to-mm transform. Run once per camera position/zoom -- not per tool.'">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-grid" :disabled="disabledNow || detecting || !cfg.bridgeUrl" @click="doCalibrate">
-                  {{ $t("plugins.duetToolAlign.actions.calibrate") }}
-                </v-btn>
-              </template>
-            </v-tooltip>
-            <span v-if="transform" class="text-caption" style="color: rgb(var(--v-theme-success));">
-              <v-icon size="14" class="mr-1">mdi-check-circle</v-icon>Calibrated<span v-if="calibResult">: {{ calibResult }}</span><span v-else class="text-medium-emphasis"> (from a previous session -- re-run if the camera's moved)</span>
-            </span>
-          </div>
-
-          <template v-if="cfg.referenceMode === 'point'">
-            <div class="text-subtitle-2 mb-1">4. Centre &amp; capture the carriage datum</div>
-            <div class="d-flex ga-2 flex-wrap align-center mb-2">
-              <v-tooltip location="top" text="Unload the active tool (sends T-1) so the bare carriage/datum feature is what's over the lens.">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-eject" :disabled="disabledNow" @click="unloadTool">
-                    {{ $t("plugins.duetToolAlign.tools.unload") }}
-                  </v-btn>
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" text="Travel to the saved camera position (X/Y, and Z if saved).">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-camera-marker" :disabled="disabledNow || !hasCameraPos" @click="gotoCamera">
-                    {{ $t("plugins.duetToolAlign.camera.goto") }}
-                  </v-btn>
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" max-width="320" text="On: Go to camera always returns to the exact saved machine position (G53), regardless of the loaded tool's offset -- reliable even mid-calibration when offsets aren't set yet. Off: moves in the loaded tool's offset-compensated coordinates, so that tool's nozzle lands over the camera instead of the bare carriage.">
-                <template #activator="{ props }">
-                  <v-switch v-bind="props" v-model="cfg.useG53" density="compact" hide-details color="primary"
-                            :label="$t('plugins.duetToolAlign.settings.useG53')" class="flex-grow-0" />
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" max-width="320" text="On: Go to camera also drives Z to the saved camera focus height (after any safe-Z lift). Off: only moves X/Y -- Z is left wherever the safe-Z lift put it (or untouched if no safe Z is set) -- useful if you're focusing manually and don't want every Go to camera to re-drive Z to a stale value.">
-                <template #activator="{ props }">
-                  <v-switch v-bind="props" v-model="cfg.gotoCameraZ" density="compact" hide-details color="primary"
-                            :label="$t('plugins.duetToolAlign.settings.gotoCameraZ')" class="flex-grow-0" />
-                </template>
-              </v-tooltip>
-            </div>
-            <div v-if="centreDatumReason" class="text-caption text-warning mb-2 d-flex align-center ga-1">
-              <v-icon size="14">mdi-alert</v-icon>
-              <span>{{ centreDatumReason }}</span>
-            </div>
-            <div class="d-flex ga-2 flex-wrap align-center mb-3">
-              <v-tooltip location="top" :text="centreDatumReason ?? 'Centre the carriage datum target on the crosshair using the camera (its own Detection profile, if set above) and record the converged position -- every tool\'s offset (T0 included) is measured from this point.'">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" color="primary" variant="flat" prepend-icon="mdi-image-filter-center-focus"
-                         :disabled="disabledNow || detecting || !transform" @click="centreDatum">
-                    {{ $t("plugins.duetToolAlign.offsets.centreDatum") }}
-                  </v-btn>
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" text="Manually record the current machine XY as the carriage datum, without camera assistance -- use this if the datum target isn't something the camera can detect. Jog the switch/feature onto the crosshair first.">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" variant="text" prepend-icon="mdi-crosshairs-gps" :disabled="disabledNow" @click="captureRefPoint">
-                    {{ $t("plugins.duetToolAlign.offsets.captureDatum") }}
-                  </v-btn>
-                </template>
-              </v-tooltip>
-              <span class="text-caption text-medium-emphasis aa-num">
-                {{ $t("plugins.duetToolAlign.offsets.datum") }}: {{ refPoint ? refPoint.x.toFixed(2) + ", " + refPoint.y.toFixed(2) : "—" }}
-              </span>
-            </div>
-          </template>
-
-          <div class="text-subtitle-2 mb-1">{{ cfg.referenceMode === "point" ? "5" : "4" }}. Set camera position</div>
-          <div class="text-caption text-medium-emphasis mb-2">Save the position you're sitting at right now as "the camera position", for Go to camera on every later tool change. Do this last -- once centred on a tool or the datum, that's a more precise spot to remember than wherever you started jogging from.</div>
-          <div class="d-flex ga-2 flex-wrap align-center">
-            <v-tooltip location="top" text="Save the current machine position as the camera position, for 'Go to camera' and every tool change from here on.">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-crosshairs" :disabled="disabledNow" @click="setCamera">
-                  {{ $t("plugins.duetToolAlign.camera.set") }}
-                </v-btn>
-              </template>
-            </v-tooltip>
-            <span v-if="hasCameraPos" class="text-caption text-medium-emphasis aa-num">Saved: {{ fmtPos(cfg.cameraX) }}, {{ fmtPos(cfg.cameraY) }}</span>
-          </div>
         </v-card>
       </template>
 
@@ -470,6 +452,11 @@
       <template #item.4>
         <v-card flat>
           <div class="text-body-2 mb-3">Do this once for each tool: load it, bring it into frame, confirm the lock, then align. Repeat for every tool.</div>
+
+          <div v-if="tools.length" class="d-flex align-center ga-2 mb-3">
+            <v-progress-linear :model-value="tools.length ? (alignedCount / tools.length) * 100 : 0" height="6" rounded color="success" class="flex-grow-1" style="max-width: 220px;" />
+            <span class="text-caption text-medium-emphasis aa-num">{{ alignedCount }} / {{ tools.length }} aligned</span>
+          </div>
 
           <div v-if="tools.length" class="d-flex flex-wrap ga-2 mb-3">
             <v-chip v-for="(t, i) in tools" :key="t.number" size="small" class="text-none"
@@ -507,77 +494,8 @@
               </div>
             </div>
 
-            <div class="d-flex flex-wrap align-center ga-3 mb-2">
-              <div class="d-flex align-center ga-1 aa-jog-group">
-                <span class="text-caption text-medium-emphasis mr-1">XY</span>
-                <v-tooltip location="top" text="Jog X by the step size, to bring the tool's nozzle into frame.">
-                  <template #activator="{ props }">
-                    <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('X', -1)">X−</v-btn>
-                  </template>
-                </v-tooltip>
-                <v-tooltip location="top" text="Jog X by the step size, to bring the tool's nozzle into frame.">
-                  <template #activator="{ props }">
-                    <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('X', 1)">X+</v-btn>
-                  </template>
-                </v-tooltip>
-                <v-tooltip location="top" text="Jog Y by the step size, to bring the tool's nozzle into frame.">
-                  <template #activator="{ props }">
-                    <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('Y', -1)">Y−</v-btn>
-                  </template>
-                </v-tooltip>
-                <v-tooltip location="top" text="Jog Y by the step size, to bring the tool's nozzle into frame.">
-                  <template #activator="{ props }">
-                    <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="jogXY('Y', 1)">Y+</v-btn>
-                  </template>
-                </v-tooltip>
-                <v-tooltip location="top" max-width="280" text="X/Y jog distance per button press (mm). Use a big step to bring a far-off tool into frame, then a small step to fine-tune. (default: 0.1)">
-                  <template #activator="{ props }">
-                    <v-text-field v-bind="props" v-model.number="cfg.xyStep" type="number" min="0.01" max="50" step="0.05" label="XY step"
-                                  density="compact" variant="outlined" hide-details class="aa-step-field" suffix="mm" />
-                  </template>
-                </v-tooltip>
-              </div>
-              <v-divider vertical class="aa-jog-divider" />
-              <div class="d-flex align-center ga-1 aa-jog-group">
-                <span class="text-caption text-medium-emphasis mr-1">Z</span>
-                <v-tooltip location="top" text="Jog Z down by the step size, to bring the nozzle into focus.">
-                  <template #activator="{ props }">
-                    <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(-1)">Z−</v-btn>
-                  </template>
-                </v-tooltip>
-                <v-tooltip location="top" text="Jog Z up by the step size, to bring the nozzle into focus.">
-                  <template #activator="{ props }">
-                    <v-btn v-bind="props" size="small" variant="tonal" :disabled="disabledNow" @click="focusZ(1)">Z+</v-btn>
-                  </template>
-                </v-tooltip>
-                <v-tooltip location="top" max-width="280" text="Z distance per -Z/+Z press (mm), to bring the nozzle into focus. Typical 0.02–0.2. (default: 0.05)">
-                  <template #activator="{ props }">
-                    <v-text-field v-bind="props" v-model.number="cfg.zStep" type="number" min="0.01" max="2" step="0.01" label="Z step"
-                                  density="compact" variant="outlined" hide-details class="aa-step-field" suffix="mm" />
-                  </template>
-                </v-tooltip>
-              </div>
-            </div>
+            <JogCameraStrip :disabled="disabledNow" @jog-xy="jogXY" @jog-z="focusZ" @goto-camera="gotoCamera" />
             <div class="d-flex ga-1 flex-wrap align-center mb-2">
-              <v-tooltip location="top" text="Travel to the saved camera position (X/Y, and Z if saved).">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-camera-marker" :disabled="disabledNow || !hasCameraPos" @click="gotoCamera">
-                    {{ $t("plugins.duetToolAlign.camera.goto") }}
-                  </v-btn>
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" max-width="320" text="On: Go to camera always returns to the exact saved machine position (G53), regardless of the loaded tool's offset -- reliable even mid-calibration when offsets aren't set yet. Off: moves in the loaded tool's offset-compensated coordinates, so that tool's nozzle lands over the camera instead of the bare carriage.">
-                <template #activator="{ props }">
-                  <v-switch v-bind="props" v-model="cfg.useG53" density="compact" hide-details color="primary"
-                            :label="$t('plugins.duetToolAlign.settings.useG53')" class="flex-grow-0" />
-                </template>
-              </v-tooltip>
-              <v-tooltip location="top" max-width="320" text="On: Go to camera also drives Z to the saved camera focus height (after any safe-Z lift). Off: only moves X/Y -- Z is left wherever the safe-Z lift put it (or untouched if no safe Z is set) -- useful if you're focusing manually and don't want every Go to camera to re-drive Z to a stale value.">
-                <template #activator="{ props }">
-                  <v-switch v-bind="props" v-model="cfg.gotoCameraZ" density="compact" hide-details color="primary"
-                            :label="$t('plugins.duetToolAlign.settings.gotoCameraZ')" class="flex-grow-0" />
-                </template>
-              </v-tooltip>
               <v-tooltip location="top" text="Continuously detect without moving anything -- confirm the lock before aligning. Uses whichever profile the loaded tool resolves to.">
                 <template #activator="{ props }">
                   <v-btn v-bind="props" size="small" :variant="detecting ? 'flat' : 'tonal'" :color="detecting ? 'primary' : undefined"
@@ -823,6 +741,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
 import { HelpTip } from "dwc-plugin-runtime";
+import JogCameraStrip from "./JogCameraStrip.vue";
 
 import i18n from "@/i18n";
 import { useMachineStore } from "@/stores/machine";
@@ -1881,6 +1800,36 @@ async function autoTune(): Promise<void> {
   }
 }
 
+// --- Step 3 (Calibrate) checklist: which sub-stage keys are relevant right now (datum only in point
+// mode), which are done, and which is open in the accordion -- auto-advances to the first incomplete
+// stage whenever that changes, e.g. right after Detect locks on or Calibrate succeeds, but stays out
+// of the way of a manual click to reopen/re-check an earlier stage otherwise.
+const panel3Keys = computed<Array<string>>(() => {
+  const keys = ["detect", "calibrate"];
+  if (cfg.referenceMode === "point") keys.push("datum");
+  keys.push("camera");
+  return keys;
+});
+const panel3Done = computed<Record<string, boolean>>(() => ({
+  detect: lastDetection.value != null,
+  calibrate: !!transform.value,
+  datum: !!refPoint.value,
+  camera: hasCameraPos.value,
+}));
+const panel3Summary = computed<Record<string, string>>(() => ({
+  detect: lastDetection.value ? `locked, r=${lastRadius.value.toFixed(0)}px` : "",
+  calibrate: calibResult.value || (transform.value ? "from a previous session" : ""),
+  datum: refPoint.value ? `${refPoint.value.x.toFixed(2)}, ${refPoint.value.y.toFixed(2)}` : "",
+  camera: hasCameraPos.value ? `${fmtPos(cfg.cameraX)}, ${fmtPos(cfg.cameraY)}` : "",
+}));
+function panel3Num(key: string): number { return panel3Keys.value.indexOf(key) + 1; }
+const firstIncomplete3 = computed(() => panel3Keys.value.find((k) => !panel3Done.value[k]) ?? panel3Keys.value[panel3Keys.value.length - 1]);
+const openPanel3 = ref<number | undefined>(0);
+watch(firstIncomplete3, (key) => {
+  const idx = panel3Keys.value.indexOf(key);
+  if (idx >= 0) openPanel3.value = idx;
+});
+
 // --- Guided wizard: step navigation --------------------------------------------
 const step = ref(1);
 const stepTitles = [
@@ -1908,6 +1857,38 @@ function wizardNextTool(): void { if (wizardToolIndex.value < tools.value.length
 const wizardLoaded = computed(() => !!wizardTool.value && current.value === wizardTool.value.number);
 const wizardDetected = computed(() => lastDetection.value != null);
 const wizardAligned = computed(() => !!wizardTool.value && !!captures.value[wizardTool.value.number]);
+// How many tools have a captured offset, for step 4's overall progress bar (the per-tool chips only
+// show which ONE tool you're on, not how much of the whole job is left).
+const alignedCount = computed(() => tools.value.filter((t) => !!captures.value[t.number]).length);
+
+// Persistent "what to click next" banner (shown in the zone above the stepper, on every step) --
+// previously this guidance was scattered across body text and tooltips you had to go looking for.
+const allDone3 = computed(() => panel3Keys.value.every((k) => panel3Done.value[k]));
+const nextAction = computed<{ text: string; done: boolean }>(() => {
+  if (!cfg.bridgeUrl) return { text: "Enter the camera bridge URL to connect the stream.", done: false };
+  if (step.value === 1) return { text: "Camera connected -- continue to Reference.", done: true };
+  if (step.value === 2) return { text: "Choose what tool offsets are measured from, then continue to Calibrate.", done: false };
+  if (step.value === 3) {
+    if (allDone3.value) return { text: "Step 3 complete -- head to Align tools.", done: true };
+    const msgs: Record<string, string> = {
+      detect: "Jog the target into frame and focus, then click Detect.",
+      calibrate: "Click Calibrate to solve the pixel-to-mm transform.",
+      datum: "Unload the tool, then Centre & capture datum.",
+      camera: "Once centred, click Set camera position.",
+    };
+    return { text: msgs[firstIncomplete3.value] ?? "", done: false };
+  }
+  if (step.value === 4) {
+    if (!tools.value.length) return { text: "No tools found in the object model.", done: false };
+    const t = wizardTool.value;
+    if (!t) return { text: "", done: false };
+    const name = t.name || "T" + t.number;
+    if (!wizardLoaded.value) return { text: `Load ${name} to continue.`, done: false };
+    if (!wizardAligned.value) return { text: `${name} is loaded -- bring it into frame, confirm the lock, then Align.`, done: false };
+    return { text: `${name} is aligned. Pick the next tool above, or move on to Review & save.`, done: true };
+  }
+  return { text: "Check each tool's offset against its current value, then Apply all.", done: true }; // step 5
+});
 
 // Auto-select the Detection profile being tuned, so the ruler/Detect-preview/Auto-detect/Advanced
 // fields always match what actual detection will use -- previously the user had to remember to pick
@@ -2030,6 +2011,37 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
 .aa-status-info { color: rgba(127, 127, 127, 0.95); }
 .aa-status-ok { color: #2e7d32; }
 .aa-status-error { color: #c62828; }
+
+.aa-next-action {
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-bottom: 1px solid rgba(var(--v-theme-primary), 0.25);
+}
+.aa-next-action.aa-next-action-done {
+  background: rgba(var(--v-theme-success), 0.08);
+  border-bottom-color: rgba(var(--v-theme-success), 0.25);
+}
+.aa-next-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  background: rgb(var(--v-theme-primary));
+  box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.2);
+}
+.aa-next-action-done .aa-next-dot {
+  background: rgb(var(--v-theme-success));
+  box-shadow: 0 0 0 3px rgba(var(--v-theme-success), 0.2);
+}
+.aa-next-label { font-size: 10px; letter-spacing: 0.04em; }
+
+/* Step 3's checklist: a numbered/checkmarked circle + title per accordion panel, so progress through
+   the sub-stages reads at a glance without depending on which one happens to be expanded. */
+.aa-checklist :deep(.v-expansion-panel-title) { min-height: 0; padding: 10px 14px; }
+.aa-cl-num {
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; margin-right: 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+  background: rgba(127, 127, 127, 0.2); color: rgba(127, 127, 127, 0.95);
+}
+.aa-cl-num-done { background: rgba(var(--v-theme-success), 0.18); color: rgb(var(--v-theme-success)); }
+.aa-cl-title { font-weight: 600; flex: 0 0 auto; margin-right: 10px; }
 
 .aa-btn { min-width: 0; }
 .aa-narrow { max-width: 120px; }
