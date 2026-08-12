@@ -762,6 +762,21 @@
     </v-stepper>
     </div>
     </div>
+
+    <v-dialog v-model="confirmOpen" max-width="480" persistent>
+      <v-card>
+        <v-card-title>{{ $t("plugins.duetToolAlign.offsets.confirmTitle") }}</v-card-title>
+        <v-card-text>
+          <div class="mb-2">{{ $t("plugins.duetToolAlign.offsets.confirmBody") }}</div>
+          <pre class="aa-confirm-body">{{ confirmBody }}</pre>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="resolveConfirm(false)">{{ $t("plugins.duetToolAlign.offsets.confirmCancel") }}</v-btn>
+          <v-btn color="primary" variant="flat" @click="resolveConfirm(true)">{{ $t("plugins.duetToolAlign.offsets.confirmConfirm") }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -769,7 +784,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { HelpTip } from "dwc-plugin-runtime";
 
-import { showConfirmDialog } from "@/composables/useConfirmDialog";
 import i18n from "@/i18n";
 import { useMachineStore } from "@/stores/machine";
 import { LogLevel, useUiStore } from "@/stores/ui";
@@ -1484,12 +1498,23 @@ async function saveOffsets(): Promise<void> {
   if (!cfg.saveCommand) return;
   if (await confirmApply([cfg.saveCommand])) void send(cfg.saveCommand);
 }
+// Built into the widget rather than using DWC's shared @/composables/useConfirmDialog: that
+// composable threw a TypeError from inside DWC 3.7's own bundle (an "instanceof" check against an
+// apparently-undefined class reference -- a DWC-side bug, not something this plugin's call could
+// work around) every time it opened, crashing the whole plugin and wiping all session-only state
+// (captures, refPoint) with it. A self-contained dialog can't be affected by that.
+const confirmOpen = ref(false);
+const confirmBody = ref("");
+let confirmResolve: ((v: boolean) => void) | null = null;
 function confirmApply(cmds: Array<string>): Promise<boolean> {
-  return showConfirmDialog(
-    i18n.global.t("plugins.duetToolAlign.offsets.confirmTitle"),
-    `${i18n.global.t("plugins.duetToolAlign.offsets.confirmBody")}\n\n${cmds.join("\n")}`,
-    "mdi-content-save-cog",
-  );
+  confirmBody.value = cmds.join("\n");
+  confirmOpen.value = true;
+  return new Promise<boolean>((resolve) => { confirmResolve = resolve; });
+}
+function resolveConfirm(v: boolean): void {
+  confirmOpen.value = false;
+  confirmResolve?.(v);
+  confirmResolve = null;
 }
 
 // --- Field metadata (drives numeric fields with tooltips + ranges) ---
@@ -1898,6 +1923,16 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
 .aa-jog-group { flex-wrap: nowrap; }
 .aa-jog-divider { align-self: stretch; margin: 0 2px; }
 .aa-step-field { max-width: 140px; }
+.aa-confirm-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: monospace;
+  font-size: 0.85em;
+  background: rgba(127, 127, 127, 0.1);
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin: 0;
+}
 /* A little wider than before (was 160px): labels are now short (unit moved to the field's own
    suffix, see NumField.unit), but a value + suffix together (e.g. "30000" + "mm/min") still wants
    more room than a bare value did. */

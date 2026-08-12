@@ -98,7 +98,9 @@
 		"clear": "Clear",
 		"persistHint": "Offsets are applied with G10. Use Save to persist them across reboots.",
 		"confirmTitle": "Apply tool offsets?",
-		"confirmBody": "The following commands will be sent:"
+		"confirmBody": "The following commands will be sent:",
+		"confirmCancel": "Cancel",
+		"confirmConfirm": "Send"
 	},
 	"updates": {
 		"title": "Tool Align update",
