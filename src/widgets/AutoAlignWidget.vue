@@ -1095,9 +1095,18 @@ function resolveDetectionSettings(profileKey: string | null): DetectionSettings 
   return (override ? { ...base, ...override } : base) as unknown as DetectionSettings;
 }
 
-// The profile that actually drives live detection: whichever tool is currently loaded on the machine
-// (not the settings panel's independently-browsable editingProfileKey below).
-const liveProfileKey = computed(() => (current.value >= 0 ? String(current.value) : null));
+// The profile that actually drives live detection: whichever tool is currently loaded on the
+// machine, or the carriage datum's profile when nothing's loaded and that's what's being detected
+// against (point reference mode) -- not the settings panel's independently-browsable
+// editingProfileKey below. This used to just fall back to Global whenever no tool was loaded,
+// which meant Calibrate/Centre ignored the datum profile's overrides entirely (even with "Use
+// custom settings" ticked) whenever you were correctly testing against the bare carriage/datum,
+// exactly the scenario referenceMode "point" with nothing loaded is for.
+const liveProfileKey = computed(() => {
+  if (current.value >= 0) return String(current.value);
+  if (cfg.referenceMode === "point") return "datum";
+  return null;
+});
 
 // Build the detector params from the resolved (global + per-tool override) settings, so tuning in
 // Settings -- global or a profile for the loaded tool -- takes effect immediately in the live Detect loop.
@@ -1805,25 +1814,21 @@ const wizardAligned = computed(() => !!wizardTool.value && !!captures.value[wiza
 // fields always match what actual detection will use -- previously the user had to remember to pick
 // it manually, and a forgotten switch made Centre & capture datum fail against the wrong (usually
 // Global) settings with no obvious reason why.
-//  - Step 3 (Calibrate): follows whatever's actually live -- the loaded tool's profile if one's
-//    loaded, otherwise the carriage datum's profile in point mode with nothing loaded, otherwise
-//    Global. This has to match doCalibrate()/centreCurrent()'s own detectOnce() with no override,
-//    which resolves the exact same way via liveProfileKey -- otherwise tuning Detect (bound to
-//    editingProfileKey) can look perfectly locked while Calibrate silently uses a completely
-//    different, untuned profile and fails with no obvious reason why (this bit us: sensitivity
-//    tuned to rock-solid on a tool's profile while browsing something else, Calibrate still failed).
+//  - Step 3 (Calibrate): mirrors liveProfileKey exactly -- deliberately the SAME computed
+//    doCalibrate()/centreCurrent()'s own detectOnce() (with no override) resolves against, so
+//    these two can't drift apart again. They did once already: tuning Detect (bound to
+//    editingProfileKey) could look perfectly locked while Calibrate silently used a completely
+//    different, untuned profile and failed with no obvious reason why.
 //  - Step 4 (Align tools): always follow whichever tool's checklist is showing, since that's the
 //    only thing step 4 ever detects against (can differ from the loaded tool -- you can browse
 //    ahead to tune a tool you haven't loaded yet).
 // Doesn't fire outside those specific situations, so browsing a different profile by hand (e.g. to
 // check Global, or a tool's settings while on step 1/2/5) isn't clobbered.
-watch([step, () => cfg.referenceMode, current, wizardToolIndex], ([s, mode, cur]) => {
-  if (s === 3 && mode === "point" && cur < 0) {
-    editingProfileKey.value = "datum";
+watch([step, liveProfileKey, wizardToolIndex], ([s]) => {
+  if (s === 3) {
+    editingProfileKey.value = liveProfileKey.value;
   } else if (s === 4 && wizardTool.value) {
     editingProfileKey.value = String(wizardTool.value.number);
-  } else if (s === 3) {
-    editingProfileKey.value = cur >= 0 ? String(cur) : null;
   }
 }, { immediate: true });
 
