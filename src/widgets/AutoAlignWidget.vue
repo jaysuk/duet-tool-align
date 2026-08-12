@@ -1653,12 +1653,14 @@ const HOUGH_SWEEP: ReadonlyArray<number> = [90, 70, 55, 45, 36, 29, 23, 18, 14, 
 const CONTOUR_SWEEP: ReadonlyArray<number> = [0.85, 0.75, 0.65, 0.55, 0.45, 0.35];
 
 // Runs `settings` against several fresh frames and reports whether exactly one candidate near frame
-// centre showed up consistently, with a stable radius (not jumping between a real detection and noise).
+// centre showed up consistently, with a stable radius AND a stable position (not jumping between a
+// real detection and noise, or between the real detection and a same-sized decoy nearby).
 async function trySettings(settings: DetectionSettings): Promise<boolean> {
   const centre = frameCentre();
   const nearRadius = Math.min(frameW.value || 640, frameH.value || 480) * 0.35;
   let hits = 0;
   const radii: Array<number> = [];
+  const positions: Array<Vec2> = [];
   for (let i = 0; i < AUTOTUNE_FRAMES; i++) {
     if (aborted) return false;
     let img: ImageData;
@@ -1676,12 +1678,22 @@ async function trySettings(settings: DetectionSettings): Promise<boolean> {
     }
     const res = await detector.detect(img, detectParams(settings));
     const near = res.circles.filter((c) => Math.hypot(c.x - centre.x, c.y - centre.y) < nearRadius);
-    if (near.length === 1) { hits++; radii.push(near[0].r); }
+    if (near.length === 1) { hits++; radii.push(near[0].r); positions.push({ x: near[0].x, y: near[0].y }); }
   }
   if (hits < AUTOTUNE_HITS) return false;
   const meanR = radii.reduce((a, b) => a + b, 0) / radii.length;
   const spread = Math.max(...radii) - Math.min(...radii);
-  return spread <= meanR * 0.25;
+  if (spread > meanR * 0.25) return false;
+  // Radius consistency alone isn't enough: Calibrate/Centre lock on via detectStable() (see
+  // orchestrator.ts), which requires the *position* to stay within cfg.tolerancePx of its mean --
+  // not just "a similarly-sized circle somewhere nearby each frame". A stricter threshold can
+  // easily pass the radius check while still finding a slightly different spot each frame (a
+  // less-certain centroid estimate, or hopping onto a same-sized decoy), which then fails
+  // Calibrate immediately afterward even though autoTune called it stable. Same tolerance, same
+  // pass/fail bar as what actually has to lock on downstream.
+  const n = positions.length;
+  const meanPos = positions.reduce((a, p) => ({ x: a.x + p.x / n, y: a.y + p.y / n }), { x: 0, y: 0 });
+  return positions.every((p) => Math.hypot(p.x - meanPos.x, p.y - meanPos.y) <= cfg.tolerancePx);
 }
 
 async function autoTune(): Promise<void> {
