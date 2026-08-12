@@ -701,12 +701,19 @@
         <v-card flat>
           <div class="text-body-2 mb-3">Check every tool's offset, then apply and persist.</div>
 
+          <div class="aa-grid-scroll">
           <table class="aa-grid">
             <thead>
               <tr>
                 <th>{{ $t("plugins.duetToolAlign.offsets.tool") }}</th>
                 <th>{{ $t("plugins.duetToolAlign.offsets.captured") }}</th>
+                <th>{{ $t("plugins.duetToolAlign.offsets.current") }}</th>
                 <th>{{ $t("plugins.duetToolAlign.offsets.offset") }}</th>
+                <th>
+                  <v-tooltip location="top" max-width="280" :text="`How far the new offset is from what's currently applied (mm) -- flagged past ${DIFF_WARN_MM}mm as worth a second look before applying. Often expected; occasionally a sign something's off.`">
+                    <template #activator="{ props }"><span v-bind="props">{{ $t("plugins.duetToolAlign.offsets.diff") }}</span></template>
+                  </v-tooltip>
+                </th>
                 <th />
               </tr>
             </thead>
@@ -714,7 +721,15 @@
               <tr v-for="r in rows" :key="r.number" :class="{ 'aa-ref': r.isRef }">
                 <td>{{ r.name }}<span v-if="r.isRef" class="aa-badge">{{ $t("plugins.duetToolAlign.offsets.refBadge") }}</span></td>
                 <td class="aa-num">{{ r.captured }}</td>
+                <td class="aa-num text-medium-emphasis">{{ r.current }}</td>
                 <td class="aa-num">{{ r.offset }}</td>
+                <td class="aa-num">
+                  <span v-if="r.diff == null" class="text-medium-emphasis">—</span>
+                  <span v-else-if="r.diffLarge" class="text-warning d-inline-flex align-center ga-1">
+                    <v-icon size="14">mdi-alert</v-icon>{{ r.diff.toFixed(3) }}
+                  </span>
+                  <span v-else>{{ r.diff.toFixed(3) }}</span>
+                </td>
                 <td>
                   <v-tooltip v-if="!r.isRef && r.g10" location="top" :text="`Apply ${r.name}'s offset now (sends ${r.g10}).`">
                     <template #activator="{ props }">
@@ -727,6 +742,7 @@
               </tr>
             </tbody>
           </table>
+          </div>
 
           <div class="d-flex align-center ga-2 mt-2 flex-wrap">
             <v-tooltip location="top" text="Apply every captured tool's offset via G10, in one go.">
@@ -1050,7 +1066,7 @@ function setStatus(msg: string, kind: "info" | "ok" | "error" = "info"): void {
 interface RawTool { number?: number; name?: string; offsets?: Array<number> }
 interface RawAxis { letter?: string; homed?: boolean; machinePosition?: number | null }
 
-const tools = computed<Array<{ number: number; name: string }>>(() => {
+const tools = computed<Array<{ number: number; name: string; curX: number | null; curY: number | null }>>(() => {
   const arr = resolveOmPath(machineStore.model, "tools");
   if (!Array.isArray(arr)) return [];
   // DWC's object-model arrays are a ModelCollection (extends Array) that doesn't override
@@ -1064,7 +1080,14 @@ const tools = computed<Array<{ number: number; name: string }>>(() => {
   // plain Array here, at the one place `tools` values enter this widget, so nothing downstream has
   // to know or care about this.
   return [...(arr as Array<RawTool | null>).filter((t): t is RawTool => t != null)
-    .map((t) => ({ number: t.number ?? 0, name: t.name ?? "" }))];
+    .map((t) => ({
+      number: t.number ?? 0,
+      name: t.name ?? "",
+      // The tool's currently-applied G10 offset (before anything on this page is sent), X/Y only --
+      // used to compare against the newly-calculated offset in the Review & save table.
+      curX: Array.isArray(t.offsets) && typeof t.offsets[0] === "number" ? t.offsets[0] : null,
+      curY: Array.isArray(t.offsets) && typeof t.offsets[1] === "number" ? t.offsets[1] : null,
+    }))];
 });
 const current = computed(() => {
   const n = resolveOmPath(machineStore.model, "state.currentTool");
@@ -1550,14 +1573,35 @@ function fmtOffset(o: ToolOffset | null): string {
   if (!o || typeof o.x !== "number" || typeof o.y !== "number") return "—";
   return `${o.x.toFixed(3)}, ${o.y.toFixed(3)}`;
 }
-const rows = computed(() => tools.value.map((t) => ({
-  number: t.number,
-  name: t.name || ("T" + t.number),
-  isRef: cfg.referenceMode === "tool" && t.number === cfg.referenceTool,
-  captured: fmtPair(captures.value[t.number]),
-  offset: fmtOffset(offsetFor(t.number)),
-  g10: g10For(t.number),
-})));
+function fmtCurrent(t: { curX: number | null; curY: number | null }): string {
+  if (t.curX == null || t.curY == null) return "—";
+  return `${t.curX.toFixed(3)}, ${t.curY.toFixed(3)}`;
+}
+// How far the newly-calculated offset is from what's currently applied on the machine (mm), or null
+// if either side is unavailable (not captured yet, or the tool has no current G10 offset at all).
+// Flagged in the table past DIFF_WARN_MM as "worth a second look before applying" -- most often a
+// real, expected change (that's the point of running this), but occasionally a sign something's off
+// (wrong tool loaded during capture, reference mixed up, a bad detection that slipped through).
+const DIFF_WARN_MM = 0.3;
+function diffFor(o: ToolOffset | null, t: { curX: number | null; curY: number | null }): number | null {
+  if (!o || typeof o.x !== "number" || typeof o.y !== "number" || t.curX == null || t.curY == null) return null;
+  return Math.hypot(o.x - t.curX, o.y - t.curY);
+}
+const rows = computed(() => tools.value.map((t) => {
+  const o = offsetFor(t.number);
+  const diff = diffFor(o, t);
+  return {
+    number: t.number,
+    name: t.name || ("T" + t.number),
+    isRef: cfg.referenceMode === "tool" && t.number === cfg.referenceTool,
+    captured: fmtPair(captures.value[t.number]),
+    current: fmtCurrent(t),
+    offset: fmtOffset(o),
+    diff,
+    diffLarge: diff != null && diff > DIFF_WARN_MM,
+    g10: g10For(t.number),
+  };
+}));
 
 async function applyTool(t: number): Promise<void> {
   const cmd = g10For(t);
@@ -2030,6 +2074,7 @@ onBeforeUnmount(() => { aborted = true; if (timer) clearTimeout(timer); detector
 .aa-stepper :deep(.v-stepper-item) { padding: 10px 14px; }
 .aa-choice-card { flex: 1 1 220px; min-width: 220px; cursor: pointer; }
 
+.aa-grid-scroll { overflow-x: auto; }
 .aa-grid { width: 100%; border-collapse: collapse; font-size: 0.8em; }
 .aa-grid th { text-align: left; font-weight: 600; opacity: 0.7; padding: 1px 4px; }
 .aa-grid td { padding: 1px 4px; border-top: 1px solid rgba(127, 127, 127, 0.2); }

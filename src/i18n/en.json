@@ -83,7 +83,9 @@
 	"offsets": {
 		"tool": "Tool",
 		"captured": "Captured X,Y",
+		"current": "Current X,Y",
 		"offset": "Offset X,Y",
+		"diff": "Δ",
 		"apply": "Apply",
 		"applyAll": "Apply all",
 		"save": "Save (M500 P10)",
