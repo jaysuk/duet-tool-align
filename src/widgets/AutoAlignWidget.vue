@@ -1768,17 +1768,25 @@ const wizardAligned = computed(() => !!wizardTool.value && !!captures.value[wiza
 // fields always match what actual detection will use -- previously the user had to remember to pick
 // it manually, and a forgotten switch made Centre & capture datum fail against the wrong (usually
 // Global) settings with no obvious reason why.
-//  - Step 3 (Calibrate): once the carriage datum is unloaded and in frame (Reference = Carriage
-//    datum, no tool loaded), that's what you're about to detect -- follow it.
+//  - Step 3 (Calibrate): follows whatever's actually live -- the loaded tool's profile if one's
+//    loaded, otherwise the carriage datum's profile in point mode with nothing loaded, otherwise
+//    Global. This has to match doCalibrate()/centreCurrent()'s own detectOnce() with no override,
+//    which resolves the exact same way via liveProfileKey -- otherwise tuning Detect (bound to
+//    editingProfileKey) can look perfectly locked while Calibrate silently uses a completely
+//    different, untuned profile and fails with no obvious reason why (this bit us: sensitivity
+//    tuned to rock-solid on a tool's profile while browsing something else, Calibrate still failed).
 //  - Step 4 (Align tools): always follow whichever tool's checklist is showing, since that's the
-//    only thing step 4 ever detects against.
+//    only thing step 4 ever detects against (can differ from the loaded tool -- you can browse
+//    ahead to tune a tool you haven't loaded yet).
 // Doesn't fire outside those specific situations, so browsing a different profile by hand (e.g. to
-// check Global, or a tool's settings while still on step 3) isn't clobbered.
+// check Global, or a tool's settings while on step 1/2/5) isn't clobbered.
 watch([step, () => cfg.referenceMode, current, wizardToolIndex], ([s, mode, cur]) => {
   if (s === 3 && mode === "point" && cur < 0) {
     editingProfileKey.value = "datum";
   } else if (s === 4 && wizardTool.value) {
     editingProfileKey.value = String(wizardTool.value.number);
+  } else if (s === 3) {
+    editingProfileKey.value = cur >= 0 ? String(cur) : null;
   }
 }, { immediate: true });
 
