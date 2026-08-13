@@ -84,7 +84,14 @@ export async function runUpdateCheck(opts: { force?: boolean; notify?: boolean }
 		}
 	}
 	try {
-		const result = await checkForUpdate({ owner: OWNER, repo: REPO, currentVersion: currentVersion() });
+		const result = await checkForUpdate({
+			owner: OWNER, repo: REPO, currentVersion: currentVersion(),
+			// Releases carry two ZIPs (the installable plugin + a debug source-map bundle); the
+			// runtime's default pattern (any *.zip) matches both and just takes whichever GitHub
+			// lists first, which was silently downloading the srcmap ZIP instead of the plugin.
+			// Anchored so it only matches "DuetToolAlign-<version>.zip", never the "-srcmap" one.
+			assetPattern: /^DuetToolAlign-[\d.]+\.zip$/i,
+		});
 		updateState.value = result;
 		safeSet(LS_LAST, String(Date.now()));
 		if (opts.notify && result.updateAvailable && dismissedVersion.value !== result.latestVersion && !isUpdateHostActive()) {
