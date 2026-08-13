@@ -2,7 +2,7 @@
 	"id": "DuetToolAlign",
 	"name": "Duet Tool Align",
 	"author": "James Skitt",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"license": "GPL-3.0-or-later",
 	"homepage": "https://github.com/jaysuk/duet-tool-align",
 	"dwcVersion": "auto-major",
