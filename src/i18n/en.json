@@ -20,6 +20,11 @@
 		"saved": "Camera position saved.",
 		"setFirst": "Set the camera position first."
 	},
+	"light": {
+		"label": "Light",
+		"on": "On",
+		"applyFailed": "Failed to apply light setting: {msg}"
+	},
 	"actions": {
 		"homeAll": "Home All",
 		"calibrate": "Calibrate",
