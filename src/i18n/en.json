@@ -22,6 +22,7 @@
 	},
 	"light": {
 		"label": "Light",
+		"onboardLabel": "Onboard LED",
 		"on": "On",
 		"applyFailed": "Failed to apply light setting: {msg}"
 	},

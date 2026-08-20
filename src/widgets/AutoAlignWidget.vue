@@ -198,6 +198,7 @@
 
           <JogCameraStrip :disabled="disabledNow" @jog-xy="jogXY" @jog-z="focusZ" @goto-camera="gotoCamera" />
           <NeoPixelControl :bridge-url="cfg.bridgeUrl" :disabled="disabledNow" />
+          <OnboardLedControl :bridge-url="cfg.bridgeUrl" :disabled="disabledNow" />
 
           <v-expansion-panels v-model="openPanel3" variant="accordion" class="aa-checklist">
             <!-- 1. Detect & tune (includes the optional radius/sensitivity helper) -->
@@ -497,6 +498,7 @@
 
             <JogCameraStrip :disabled="disabledNow" @jog-xy="jogXY" @jog-z="focusZ" @goto-camera="gotoCamera" />
           <NeoPixelControl :bridge-url="cfg.bridgeUrl" :disabled="disabledNow" />
+          <OnboardLedControl :bridge-url="cfg.bridgeUrl" :disabled="disabledNow" />
             <div class="d-flex ga-1 flex-wrap align-center mb-2">
               <v-tooltip location="top" text="Continuously detect without moving anything -- confirm the lock before aligning. Uses whichever profile the loaded tool resolves to.">
                 <template #activator="{ props }">
@@ -745,6 +747,7 @@ import { computed, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue"
 import { HelpTip } from "dwc-plugin-runtime";
 import JogCameraStrip from "./JogCameraStrip.vue";
 import NeoPixelControl from "./NeoPixelControl.vue";
+import OnboardLedControl from "./OnboardLedControl.vue";
 
 import i18n from "@/i18n";
 import { useMachineStore } from "@/stores/machine";
