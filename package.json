@@ -23,7 +23,7 @@
     "@vitest/coverage-v8": "^4.1.8",
     "@vue/test-utils": "^2.4.6",
     "dwc-plugin-test-kit": "^0.2.7",
-    "happy-dom": "^15.11.7",
+    "happy-dom": "^20.11.15",
     "vitest": "^4.1.8",
     "vue": "^3.5.30",
     "vuetify": "^4.1.0"
