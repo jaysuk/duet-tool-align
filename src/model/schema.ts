@@ -14,6 +14,7 @@ const D = defaultConfig() as unknown as Record<string, unknown>;
 const isHough = (c: Record<string, unknown>) => c.detector === "hough";
 const isContour = (c: Record<string, unknown>) => c.detector === "contour";
 const isToolRef = (c: Record<string, unknown>) => c.referenceMode === "tool";
+const isCustomCameraUrls = (c: Record<string, unknown>) => !!c.useCustomCameraUrls;
 
 export const autoAlignSchema: WidgetConfigSchema = {
 	id: EMBEDDABLE_ID,
@@ -24,6 +25,14 @@ export const autoAlignSchema: WidgetConfigSchema = {
 			placeholder: "http://192.168.1.50:8081", description: "Base URL of the duet-webcam-bridge (camera stream + OpenCV.js)." },
 		{ key: "opencvUrl", type: "text", label: "OpenCV.js URL", group: "Camera", default: D.opencvUrl,
 			placeholder: "bundled with the plugin", description: "Override the OpenCV.js URL; blank uses the copy bundled with the plugin." },
+		{ key: "useCustomCameraUrls", type: "toggle", label: "Custom stream/snapshot URLs", group: "Camera", default: D.useCustomCameraUrls,
+			description: "For a camera/streamer whose URLs don't match the built-in <bridge>/stream + /snapshot convention." },
+		{ key: "streamUrl", type: "text", label: "Stream URL", group: "Camera", default: D.streamUrl,
+			placeholder: "blank = <bridge URL>/stream", visibleWhen: isCustomCameraUrls,
+			description: "Full URL, or a path appended to the bridge URL (e.g. /video)." },
+		{ key: "snapshotUrl", type: "text", label: "Snapshot URL", group: "Camera", default: D.snapshotUrl,
+			placeholder: "blank = <bridge URL>/snapshot", visibleWhen: isCustomCameraUrls,
+			description: "Full URL, or a path appended to the bridge URL (e.g. /shot.jpg)." },
 
 		// Alignment & motion
 		{ key: "referenceMode", type: "select", label: "Reference", group: "Alignment", default: D.referenceMode,

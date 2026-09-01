@@ -149,10 +149,25 @@
           <v-expansion-panels variant="accordion">
             <v-expansion-panel title="Advanced">
               <v-expansion-panel-text>
-                <v-text-field v-model="cfg.opencvUrl" density="compact" variant="outlined" hide-details
+                <v-text-field v-model="cfg.opencvUrl" density="compact" variant="outlined" hide-details class="mb-2"
                               :label="$t('plugins.duetToolAlign.settings.opencvUrl')" :placeholder="$t('plugins.duetToolAlign.settings.opencvUrlHint')">
                   <template #append-inner><HelpTip text="Override the OpenCV.js URL. Leave blank to use <bridge>/opencv/opencv.js (recommended)." /></template>
                 </v-text-field>
+                <div class="d-flex align-center ga-2 mb-1">
+                  <v-switch v-model="cfg.useCustomCameraUrls" density="compact" hide-details color="primary"
+                            :label="$t('plugins.duetToolAlign.settings.useCustomCameraUrls')" class="flex-grow-0" />
+                  <HelpTip text="On if your camera source doesn't use the built-in <bridge URL>/stream + /snapshot convention (duet-webcam-bridge and M5Stack-Unit-CamS3-5MP both do -- most users won't need this). Lets you specify the stream and snapshot URLs separately." />
+                </div>
+                <template v-if="cfg.useCustomCameraUrls">
+                  <v-text-field v-model="cfg.streamUrl" density="compact" variant="outlined" hide-details class="mb-2"
+                                :label="$t('plugins.duetToolAlign.settings.streamUrl')" :placeholder="$t('plugins.duetToolAlign.settings.streamUrlHint')">
+                    <template #append-inner><HelpTip text="Full URL, or a path appended to the bridge URL above (e.g. /video). Blank falls back to <bridge URL>/stream." /></template>
+                  </v-text-field>
+                  <v-text-field v-model="cfg.snapshotUrl" density="compact" variant="outlined" hide-details
+                                :label="$t('plugins.duetToolAlign.settings.snapshotUrl')" :placeholder="$t('plugins.duetToolAlign.settings.snapshotUrlHint')">
+                    <template #append-inner><HelpTip text="Full URL, or a path appended to the bridge URL above (e.g. /shot.jpg). Blank falls back to <bridge URL>/snapshot." /></template>
+                  </v-text-field>
+                </template>
               </v-expansion-panel-text>
             </v-expansion-panel>
           </v-expansion-panels>
@@ -822,11 +837,22 @@ async function ensureCv(): Promise<boolean> {
 // since a fresh connection can get torn down again before its first frame ever arrives.
 const tick = ref(0);
 let timer: ReturnType<typeof setTimeout> | null = null;
+// The custom-URLs escape hatch (see step 1's Advanced panel): a full URL is used as-is, a path is
+// appended to bridgeUrl -- same rule frameGrabber.ts's snapshotPath already applies, kept
+// consistent here so the two overrides behave identically. Blank falls back to the normal
+// <bridgeUrl>/stream / /snapshot convention either way.
+function resolveCameraUrl(base: string, override: string): string {
+  if (!override) return base.replace(/\/+$/, "") + "/stream";
+  return override.startsWith("http") ? override : base.replace(/\/+$/, "") + override;
+}
 const streamSrc = computed(() => {
   if (!cfg.bridgeUrl) return "";
-  const base = cfg.bridgeUrl.replace(/\/+$/, "") + "/stream";
+  const base = resolveCameraUrl(cfg.bridgeUrl, cfg.useCustomCameraUrls ? cfg.streamUrl : "");
   return base + (base.includes("?") ? "&" : "?") + "_t=" + tick.value;
 });
+// Passed as GrabOptions.snapshotPath to every grabFrame() call -- undefined when the custom-URLs
+// toggle is off (or its field is blank), which is exactly frameGrabber's own default ("/snapshot").
+const snapshotPathOverride = computed(() => (cfg.useCustomCameraUrls && cfg.snapshotUrl ? cfg.snapshotUrl : undefined));
 function onImgError(): void {
   if (timer) return; // a retry is already scheduled
   timer = setTimeout(() => {
@@ -988,8 +1014,41 @@ function setStatus(msg: string, kind: "info" | "ok" | "error" = "info"): void {
 }
 
 // --- Tools / position (object-model reads) ------------------------------------
-interface RawTool { number?: number; name?: string; offsets?: Array<number> }
+interface RawTool { number?: number; name?: string; offsets?: Array<number>; axes?: Array<Array<number>> }
 interface RawAxis { letter?: string; homed?: boolean; machinePosition?: number | null }
+
+function rawTool(toolNumber: number): RawTool | null {
+  const arr = resolveOmPath(machineStore.model, "tools");
+  return Array.isArray(arr) ? (arr as Array<RawTool | null>).find((t) => t?.number === toolNumber) ?? null : null;
+}
+function axisAt(index: number): RawAxis | null {
+  const arr = resolveOmPath(machineStore.model, "move.axes");
+  return Array.isArray(arr) ? ((arr as Array<RawAxis>)[index] ?? null) : null;
+}
+// A tool's logical X/Y can be remapped onto a different physical axis via M563's axis-mapping
+// parameter (e.g. an IDEX second toolhead mapping X to physical U) -- RRF redirects G-code sent as
+// X/Y to whichever physical axis that tool actually has mapped, transparently, but reading
+// position/offsets back, and writing G10, both need the physical letter/index, not the logical one.
+// tools[].axes is [[physicalIndices for logical X], [physicalIndices for logical Y]] (default
+// [[0],[1]]); tools[].offsets is a flat array indexed by PHYSICAL axis, not logical -- see
+// https://docs.duet3d.com/User_manual/Tuning/Defining_tool_and_Z_probe_offsets ("tool offsets are
+// applied after any X axis mapping has been performed; therefore if you map X to U... you should
+// specify a U offset not an X offset"). Falls back to physical X(0)/Y(1) if unmapped, not found, or
+// the tool number is -1 (no tool loaded) -- i.e. today's plain-X/Y behaviour, unchanged.
+function toolAxisIndex(t: RawTool | null, logical: 0 | 1): number {
+  const mapped = t?.axes?.[logical];
+  return Array.isArray(mapped) && typeof mapped[0] === "number" ? mapped[0] : logical;
+}
+function toolAxisLetters(toolNumber: number): { x: string; y: string; xIndex: number; yIndex: number } {
+  const t = rawTool(toolNumber);
+  const xIndex = toolAxisIndex(t, 0);
+  const yIndex = toolAxisIndex(t, 1);
+  const letterOf = (index: number, fallback: string): string => {
+    const letter = axisAt(index)?.letter;
+    return typeof letter === "string" && letter ? letter.toUpperCase() : fallback;
+  };
+  return { x: letterOf(xIndex, "X"), y: letterOf(yIndex, "Y"), xIndex, yIndex };
+}
 
 const tools = computed<Array<{ number: number; name: string; curX: number | null; curY: number | null }>>(() => {
   const arr = resolveOmPath(machineStore.model, "tools");
@@ -1005,14 +1064,19 @@ const tools = computed<Array<{ number: number; name: string; curX: number | null
   // plain Array here, at the one place `tools` values enter this widget, so nothing downstream has
   // to know or care about this.
   return [...(arr as Array<RawTool | null>).filter((t): t is RawTool => t != null)
-    .map((t) => ({
-      number: t.number ?? 0,
-      name: t.name ?? "",
-      // The tool's currently-applied G10 offset (before anything on this page is sent), X/Y only --
-      // used to compare against the newly-calculated offset in the Review & save table.
-      curX: Array.isArray(t.offsets) && typeof t.offsets[0] === "number" ? t.offsets[0] : null,
-      curY: Array.isArray(t.offsets) && typeof t.offsets[1] === "number" ? t.offsets[1] : null,
-    }))];
+    .map((t) => {
+      // Read from this tool's own mapped physical axis, not hardcoded offsets[0]/[1] -- an IDEX
+      // tool's X offset genuinely lives at offsets[3] (U), not offsets[0].
+      const xi = toolAxisIndex(t, 0), yi = toolAxisIndex(t, 1);
+      return {
+        number: t.number ?? 0,
+        name: t.name ?? "",
+        // The tool's currently-applied G10 offset (before anything on this page is sent), X/Y only --
+        // used to compare against the newly-calculated offset in the Review & save table.
+        curX: Array.isArray(t.offsets) && typeof t.offsets[xi] === "number" ? t.offsets[xi] : null,
+        curY: Array.isArray(t.offsets) && typeof t.offsets[yi] === "number" ? t.offsets[yi] : null,
+      };
+    })];
 });
 const current = computed(() => {
   const n = resolveOmPath(machineStore.model, "state.currentTool");
@@ -1023,22 +1087,27 @@ function axisRow(letter: string): RawAxis | null {
   if (!Array.isArray(arr)) return null;
   return (arr as Array<RawAxis>).find((a) => (a?.letter ?? "").toUpperCase() === letter) ?? null;
 }
-function machinePos(letter: "X" | "Y" | "Z"): number | null {
+function machinePos(letter: string): number | null {
   const a = axisRow(letter);
   return a && typeof a.machinePosition === "number" ? a.machinePosition : null;
 }
-const allHomed = computed(() => ["X", "Y"].every((l) => axisRow(l)?.homed));
-const livePos = computed(() => ({ x: machinePos("X"), y: machinePos("Y"), z: machinePos("Z") }));
+// Homed/position display tracks whichever physical axes the *currently loaded* tool actually
+// drives -- for an IDEX tool mapped onto U, physical X's homed state is irrelevant noise (it may
+// belong to a parked carriage) and physical U's is what actually matters.
+const currentAxisLetters = computed(() => toolAxisLetters(current.value));
+const allHomed = computed(() => [currentAxisLetters.value.x, currentAxisLetters.value.y].every((l) => axisRow(l)?.homed));
+const livePos = computed(() => ({ x: machinePos(currentAxisLetters.value.x), y: machinePos(currentAxisLetters.value.y), z: machinePos("Z") }));
 function fmtPos(v: number | null): string {
   return v == null ? "—" : v.toFixed(2);
 }
 
 function refOffset(): ToolOffset {
-  const arr = resolveOmPath(machineStore.model, "tools");
-  const t = Array.isArray(arr) ? (arr as Array<RawTool | null>).find((x) => x?.number === cfg.referenceTool) : null;
+  const t = rawTool(cfg.referenceTool);
   const off = t?.offsets;
+  // Own physical axis, same reasoning as the `tools` computed above -- the reference tool's X
+  // offset may live at a different index than 0 if its logical X is remapped.
   const at = (i: number) => (Array.isArray(off) && typeof off[i] === "number" ? off[i] : 0);
-  return { x: at(0), y: at(1) };
+  return { x: at(toolAxisIndex(t, 0)), y: at(toolAxisIndex(t, 1)) };
 }
 
 // --- Machine IO + detection seam ----------------------------------------------
@@ -1105,7 +1174,7 @@ function detectParams(s: DetectionSettings): DetectParams {
 async function detectOnce(profileKeyOverride?: string | null): Promise<Vec2 | null> {
   if (!cvReady.value || !cfg.bridgeUrl) return null;
   try {
-    const img = await grabFrame(cfg.bridgeUrl);
+    const img = await grabFrame(cfg.bridgeUrl, { snapshotPath: snapshotPathOverride.value });
     frameW.value = img.width;
     frameH.value = img.height;
     const centre = { x: img.width / 2, y: img.height / 2 };
@@ -1196,9 +1265,11 @@ function homeAll(): void {
   void send("G28");
 }
 
-// Capture the current machine XY as the carriage datum (referenceMode = "point").
+// Capture the current machine XY as the carriage datum (referenceMode = "point"). Uses whichever
+// tool is currently loaded (if any) to resolve the physical axis, same as everywhere else -- see
+// toolAxisLetters().
 function captureRefPoint(): void {
-  const x = machinePos("X"), y = machinePos("Y");
+  const x = machinePos(currentAxisLetters.value.x), y = machinePos(currentAxisLetters.value.y);
   if (x == null || y == null) { notify(i18n.global.t("plugins.duetToolAlign.noPos")); return; }
   refPoint.value = { x, y };
   notify(i18n.global.t("plugins.duetToolAlign.offsets.datumSaved"), LogLevel.success);
@@ -1396,7 +1467,7 @@ async function centreCurrent(): Promise<void> {
   if (!(await ensureCv())) return;
   busy.value = true; aborted = false;
   try {
-    const res = await centreTool(machineIO, detectOnce, transform.value, frameCentre(), motionParams(), progress);
+    const res = await centreTool(machineIO, detectOnce, transform.value, frameCentre(), motionParams(), progress, currentAxisLetters.value);
     if (res.ok && res.position) {
       captureXY(current.value, res.position);
       setStatus(i18n.global.t("plugins.duetToolAlign.centre.done"), "ok");
@@ -1418,7 +1489,7 @@ async function centreDatum(): Promise<void> {
   if (!(await ensureCv())) return;
   busy.value = true; aborted = false;
   try {
-    const res = await centreTool(machineIO, () => detectOnce("datum"), transform.value, frameCentre(), motionParams(), progress);
+    const res = await centreTool(machineIO, () => detectOnce("datum"), transform.value, frameCentre(), motionParams(), progress, currentAxisLetters.value);
     if (res.ok && res.position) {
       refPoint.value = res.position;
       notify(i18n.global.t("plugins.duetToolAlign.offsets.datumSaved"), LogLevel.success);
@@ -1447,7 +1518,7 @@ async function runFull(): Promise<void> {
   try {
     if (cfg.startCommand) await machineIO.sendCode(cfg.startCommand);
     if (!aborted) {
-      const res = await centreTool(machineIO, detectOnce, transform.value, frameCentre(), motionParams(), progress);
+      const res = await centreTool(machineIO, detectOnce, transform.value, frameCentre(), motionParams(), progress, currentAxisLetters.value);
       if (res.ok && res.position) captureXY(current.value, res.position);
       else setStatus(i18n.global.t("plugins.duetToolAlign.centre.fail", { msg: res.error ?? "" }), "error");
     }
@@ -1486,7 +1557,9 @@ function isOffsettable(t: number): boolean {
 }
 function g10For(t: number): string | null {
   const o = offsetFor(t);
-  return o ? formatG10(t, o) : null;
+  // Write each axis under *this tool's* mapped physical letter -- an IDEX tool with X mapped to U
+  // needs "G10 P1 U.." not "G10 P1 X..", or the offset silently lands on the wrong tool/carriage.
+  return o ? formatG10(t, o, toolAxisLetters(t)) : null;
 }
 const anyApplicable = computed(() => tools.value.some((t) => isOffsettable(t.number) && g10For(t.number)));
 
@@ -1735,7 +1808,7 @@ async function trySettings(settings: DetectionSettings): Promise<boolean> {
     if (aborted) return false;
     let img: ImageData;
     try {
-      img = await grabFrame(cfg.bridgeUrl);
+      img = await grabFrame(cfg.bridgeUrl, { snapshotPath: snapshotPathOverride.value });
     } catch (e) {
       // Unlike detectOnce() (used by Detect/Calibrate/Align), this had no error handling of its
       // own -- a bad bridge URL or an unreachable camera surfaced as an unhandled promise

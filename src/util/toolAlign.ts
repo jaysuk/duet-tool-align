@@ -51,11 +51,26 @@ export function computeToolOffset(
 	return out;
 }
 
-/** Build a `G10 P<tool> [X..] [Y..] [Z..]` command, or null when no axis is set. */
-export function formatG10(toolNumber: number, off: ToolOffset, precision = 3): string | null {
+/**
+ * Physical axis letters to write each slot's offset under. Default X/Y/Z, but a tool can remap its
+ * logical X/Y onto any physical axis via M563's axis-mapping parameter (e.g. an IDEX second
+ * toolhead mapping X onto physical U) -- RRF's own docs are explicit that "tool offsets are applied
+ * after any X axis mapping has been performed; therefore if you map X to U... you should specify a
+ * U offset not an X offset." `.x`/`.y`/`.z` here name where the value in the matching ToolOffset
+ * slot (which is always physical-position-space, camera/machine coordinates don't know about tool
+ * mapping) should land in the G10 command -- see AutoAlignWidget.vue's toolAxisLetters().
+ */
+export interface AxisLetters {
+	x?: string;
+	y?: string;
+	z?: string;
+}
+
+/** Build a `G10 P<tool> [<letter><value>...]` command, or null when no axis is set. */
+export function formatG10(toolNumber: number, off: ToolOffset, letters: AxisLetters = {}, precision = 3): string | null {
 	const parts: Array<string> = [];
-	if (typeof off.x === "number") parts.push(`X${off.x.toFixed(precision)}`);
-	if (typeof off.y === "number") parts.push(`Y${off.y.toFixed(precision)}`);
-	if (typeof off.z === "number") parts.push(`Z${off.z.toFixed(precision)}`);
+	if (typeof off.x === "number") parts.push(`${letters.x ?? "X"}${off.x.toFixed(precision)}`);
+	if (typeof off.y === "number") parts.push(`${letters.y ?? "Y"}${off.y.toFixed(precision)}`);
+	if (typeof off.z === "number") parts.push(`${letters.z ?? "Z"}${off.z.toFixed(precision)}`);
 	return parts.length ? `G10 P${toolNumber} ${parts.join(" ")}` : null;
 }

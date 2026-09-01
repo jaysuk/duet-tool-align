@@ -51,6 +51,18 @@ export interface AutoAlignConfig {
 	bridgeUrl: string;
 	/** OpenCV.js loader URL. Default derives from bridgeUrl (`<bridge>/opencv/opencv.js`). */
 	opencvUrl: string;
+	/**
+	 * Escape hatch for a camera/streamer whose URL conventions don't match either bundled backend
+	 * (duet-webcam-bridge's <bridgeUrl>/stream + /snapshot, or M5Stack-Unit-CamS3-5MP's same paths).
+	 * Off by default -- when on, streamUrl/snapshotUrl below override the derived paths.
+	 */
+	useCustomCameraUrls: boolean;
+	/** Stream URL override (only used when useCustomCameraUrls is on). A full URL, or a path
+	 *  appended to bridgeUrl (e.g. "/video"). Blank falls back to the normal <bridgeUrl>/stream. */
+	streamUrl: string;
+	/** Snapshot URL override (only used when useCustomCameraUrls is on). Same rules as streamUrl;
+	 *  blank falls back to the normal <bridgeUrl>/snapshot. */
+	snapshotUrl: string;
 
 	/**
 	 * How the 0,0 origin is defined:
@@ -162,6 +174,9 @@ export function defaultConfig(): AutoAlignConfig {
 	return {
 		bridgeUrl: "",
 		opencvUrl: "",
+		useCustomCameraUrls: false,
+		streamUrl: "",
+		snapshotUrl: "",
 		referenceMode: "tool",
 		referenceTool: 0,
 		invertOffsets: false,

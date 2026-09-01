@@ -16,7 +16,8 @@ import type { Mat2, Vec2 } from "../cv/geometry";
 
 export interface MachineIO {
 	sendCode(code: string): Promise<unknown>;
-	machinePos(letter: "X" | "Y" | "Z"): number | null;
+	/** Any axis letter, not just X/Y/Z -- a tool can remap its logical X/Y onto e.g. U (IDEX). */
+	machinePos(letter: string): number | null;
 }
 
 /** Grab one frame and detect the nozzle pixel centre; null when nothing was found this frame. */
@@ -147,7 +148,17 @@ export async function centreTool(
 	frameCentre: Vec2,
 	params: MotionParams,
 	progress?: ProgressSink,
+	/**
+	 * Physical axis letters to read the converged position back from. Defaults to X/Y, but the
+	 * *jogged* tool's logical X/Y may be remapped onto different physical axes (e.g. IDEX's second
+	 * toolhead mapping X to physical U via M563) -- RRF redirects the G1 X/Y jog commands this sends
+	 * to whichever physical axis is actually mapped, transparently, but reading the result back still
+	 * has to ask for the physical letter that actually moved, not the logical one that was sent.
+	 */
+	axisLetters?: { x: string; y: string },
 ): Promise<CentreResult> {
+	const xLetter = axisLetters?.x ?? "X";
+	const yLetter = axisLetters?.y ?? "Y";
 	for (let i = 0; i < params.maxIterations; i++) {
 		if (params.shouldAbort?.()) return { ok: false, iterations: i, error: "aborted" };
 		const px = await detectStable(detectOnce, { tolPx: params.tolerancePx, shouldAbort: params.shouldAbort }, progress);
@@ -160,8 +171,8 @@ export async function centreTool(
 		});
 		progress?.status?.(`Centring: ${corr.errorPx.toFixed(1)} px error (iter ${i + 1})`);
 		if (corr.withinTol) {
-			const x = io.machinePos("X");
-			const y = io.machinePos("Y");
+			const x = io.machinePos(xLetter);
+			const y = io.machinePos(yLetter);
 			if (x == null || y == null) return { ok: false, iterations: i, error: "machine position unavailable" };
 			return { ok: true, position: { x, y }, iterations: i };
 		}

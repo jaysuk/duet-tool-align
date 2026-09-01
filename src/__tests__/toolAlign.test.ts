@@ -63,4 +63,15 @@ describe("formatG10", () => {
 	it("returns null when no axis is set", () => {
 		expect(formatG10(2, {})).toBeNull();
 	});
+
+	// IDEX etc.: a tool can remap its logical X onto a different physical axis (e.g. U) via M563.
+	// RRF's own docs are explicit that the G10 offset must then be given under the mapped letter --
+	// "if you map X to U... you should specify a U offset not an X offset."
+	it("writes each axis under its mapped physical letter when given", () => {
+		expect(formatG10(1, { x: 3.2, y: -1.1 }, { x: "U" })).toBe("G10 P1 U3.200 Y-1.100");
+	});
+
+	it("defaults to X/Y/Z when no letters are given", () => {
+		expect(formatG10(1, { x: 3.2, y: -1.1, z: 0.05 }, {})).toBe("G10 P1 X3.200 Y-1.100 Z0.050");
+	});
 });
