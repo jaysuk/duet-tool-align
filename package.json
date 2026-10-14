@@ -13,7 +13,6 @@
     "verify-build": "dwc-plugin-verify-build",
     "release:prepare": "node scripts/fetch-opencv.mjs",
     "changelog": "node scripts/changelog.mjs",
-    "release-title": "node scripts/release-title.mjs",
     "release": "node scripts/release.mjs"
   },
   "dependencies": {

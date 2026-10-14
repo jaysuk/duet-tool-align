@@ -1,62 +1,43 @@
 #!/usr/bin/env node
 /**
- * Cut a release: bump plugin.json + package.json, commit, and create the annotated version tag. The
- * tag push is what triggers the CI release build (see .github/workflows/release.yml).
+ * Launcher for the shared release script (jaysuk/dwc-plugin-workflows). Identical in every plugin and never
+ * needs editing: it keeps a cached checkout of the shared repo at the floating `v1` tag, refreshes it on each
+ * run, and hands over to its scripts/release.mjs. So a change to the release flow reaches every plugin without
+ * touching the plugin repos.
  *
- *   node scripts/release.mjs 0.2.0          # bump + commit + tag (you push when ready)
- *   node scripts/release.mjs 0.2.0 --push   # …and push the commit + tag (triggers the release)
- *   npm run release -- 0.2.0 [--push]
+ *   npm run release -- 1.3.0 [--push] [--no-notes] [--yes]
+ *
+ * Offline, the cached copy is used. DWC_PLUGIN_WORKFLOWS_DIR=<path> runs a local checkout instead (to try a
+ * change before tagging it).
  */
-import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
-import { LOW_TITLES_THRESHOLD, pickTitle } from "./release-title.mjs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
-const args = process.argv.slice(2);
-const push = args.includes("--push");
-const version = args.find((a) => !a.startsWith("-"));
+const REPO = "https://github.com/jaysuk/dwc-plugin-workflows.git";
+const REF = "v1";
 
-if (!version || !/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(version)) {
-	console.error("Usage: node scripts/release.mjs <version> [--push]   e.g. 0.2.0");
-	process.exit(1);
-}
-const tag = `v${version}`;
-
-function git(argv) {
-	execFileSync("git", argv, { stdio: "inherit" });
-}
-
-// Refuse to release a dirty tree (other than the files we're about to bump).
-const dirty = execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" })
-	.split("\n").map((l) => l.slice(3)).filter((f) => f && f !== "plugin.json" && f !== "package.json");
-if (dirty.length) {
-	console.error(`Working tree has uncommitted changes; commit or stash them first:\n  ${dirty.join("\n  ")}`);
-	process.exit(1);
-}
-
-for (const file of ["plugin.json", "package.json"]) {
-	const json = JSON.parse(readFileSync(file, "utf8"));
-	json.version = version;
-	writeFileSync(file, JSON.stringify(json, null, file === "plugin.json" ? "\t" : 2) + "\n");
-}
-console.log(`Bumped plugin.json + package.json -> ${version}`);
-
-git(["add", "plugin.json", "package.json"]);
-git(["commit", "-m", `chore(release): ${tag}`]);
-git(["tag", "-a", tag, "-m", `DuetToolAlign ${tag}`]);
-console.log(`Committed and tagged ${tag}`);
-
-const t = pickTitle(version);
-console.log(`Release title: ${t.label}`);
-if (t.remaining <= LOW_TITLES_THRESHOLD) {
-	console.warn(
-		`\n⚠️  Only ${t.remaining} unused release title(s) left — add more to scripts/release-titles.txt before the next few releases.`,
-	);
+let dir = process.env.DWC_PLUGIN_WORKFLOWS_DIR;
+if (!dir) {
+	dir = join(homedir(), ".cache", "dwc-plugin-workflows");
+	const git = (args) => execFileSync("git", args, { stdio: "pipe", encoding: "utf8" });
+	try {
+		if (existsSync(join(dir, ".git"))) {
+			git(["-C", dir, "fetch", "--quiet", "--depth", "1", "--force", "origin", `+refs/tags/${REF}:refs/tags/${REF}`]);
+			git(["-C", dir, "checkout", "--quiet", "--force", REF]);
+		} else {
+			mkdirSync(dir, { recursive: true });
+			git(["clone", "--quiet", "--depth", "1", "--branch", REF, REPO, dir]);
+		}
+	} catch (e) {
+		if (!existsSync(join(dir, "scripts", "release.mjs"))) {
+			console.error(`Could not fetch ${REPO} (${REF}): ${e.message}`);
+			process.exit(1);
+		}
+		console.warn("Could not refresh the shared release scripts (offline?) - using the cached copy.");
+	}
 }
 
-if (push) {
-	git(["push"]);
-	git(["push", "origin", tag]);
-	console.log("Pushed. CI will build the ZIP and publish the GitHub Release.");
-} else {
-	console.log(`\nReview, then push to trigger the release:\n  git push && git push origin ${tag}`);
-}
+const r = spawnSync(process.execPath, [join(dir, "scripts", "release.mjs"), ...process.argv.slice(2)], { stdio: "inherit" });
+process.exit(r.status ?? 1);
